@@ -1,0 +1,92 @@
+name: Bug report
+description: Something behaves incorrectly or crashes
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more specific you are, the faster we can fix it.
+        Please search [existing issues](../?q=is%3Aissue) first to avoid duplicates.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: "I opened the Blame page on file `payments/charge.ts` and the columns rendered empty even though `git ai blame-analysis` from the CLI returns data."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that reliably trigger the bug.
+      placeholder: |
+        1. Open repository at `~/code/example`
+        2. Navigate to `#/blame/payments/charge.ts`
+        3. Wait for query to settle
+        4. Columns are empty; CLI version is not
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to see?
+      validations:
+        required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: git-ai-studio version
+      description: Found in `Settings → About` or the title bar.
+      placeholder: "v0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: git-ai-version
+    attributes:
+      label: git-ai CLI version
+      description: Output of `git ai --version`.
+      placeholder: "v1.5.3"
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux (x86_64)
+        - Linux (ARM64)
+        - Windows
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "macOS 15.2 / Ubuntu 24.04 / Windows 11 23H2"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: |
+        Open the in-app `Logs` page or check `~/.git-ai-studio/logs/`. Paste the last ~30 lines around the time the bug happened. Redact anything sensitive.
+      render: text
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and didn't find a duplicate
+          required: true
+        - label: I'm running the latest released version, or main if I built from source
+          required: true

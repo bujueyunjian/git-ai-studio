@@ -1,0 +1,38 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Rust / Tauri
+src-tauri/target
+src-tauri/Cargo.lock.bak
+
+# Test outputs / temporary
+coverage
+.vitest-cache
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Internal-only docs and per-developer local config (not for open source)
+HANDOFF.md
+docs/product/PR-FAQ-review.md
+.claude/settings.local.json
+.claude/projects/

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question about upstream git-ai CLI
+    url: https://github.com/git-ai-project/git-ai/issues
+    about: For CLI behavior, refs/notes/ai format, or anything not specific to the GUI, please file on the upstream repo.
+  - name: Code of Conduct violation
+    url: https://github.com/git-ai-project/git-ai-studio/blob/main/CODE_OF_CONDUCT.md
+    about: Reporting instructions are in CODE_OF_CONDUCT.md.

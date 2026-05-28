@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Git AI Studio</title>
+    <!--
+      FOUC 防御:在 React 挂载前根据 localStorage / 系统主题给 <html> 加 .dark。
+      和 src/lib/theme.ts 共用同一个 storage key,主题切换时双向同步。
+    -->
+    <script>
+      (function () {
+        try {
+          var key = "git-ai-studio.theme";
+          var t = localStorage.getItem(key) || "system";
+          var dark =
+            t === "dark" ||
+            (t === "system" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (_) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

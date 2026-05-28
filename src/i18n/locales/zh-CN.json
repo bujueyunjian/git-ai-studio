@@ -1,0 +1,907 @@
+{
+  "common": {
+    "loading": "正在加载…",
+    "noUploadNotice": "本工具仅在本机解析,不会上传任何代码、对话或诊断结果。",
+    "mustRestartAgent": "必须重启 AI agent(Claude Code / Cursor / Codex 等),否则 hook 不会生效,Diagnostic 仍会报红。",
+    "mustReopenTerminal": "Windows 安装后请关闭并重新打开终端(PowerShell / CMD / Windows Terminal / IDE 内置终端均需重开),以让 PATH 更新生效。",
+    "winAdminHint": "请以管理员身份重新打开 git-ai-studio 或终端后重试。",
+    "winCrlfHint": "仓库未声明 `* text=auto eol=lf`,Windows CRLF 可能让行归因偏移 1 行,建议在仓库根加入这一行。",
+    "winPathSafeHint": "安装路径请避免空格与中文。若已通过 GIT_AI_HOME 指向了含空格 / 中文的目录,请改到纯英文短路径(例如 C:\\git-ai)后重新安装。",
+    "ccSwitchWarning": "使用 cc-switch 切换模型时,要保证 setting 里的 hook 还在 —— cc-switch 可能覆盖 ~/.claude/settings.json 的 hooks 段,需要每次切换后回到 Hooks 页确认。"
+  },
+  "install": {
+    "sideEffects": [
+      "下载 install 脚本到 ~/.git-ai-studio/installers/",
+      "由 install 脚本将 git-ai 二进制写入 ~/.git-ai/bin/",
+      "由 install 脚本注册 git 代理 shim 到 PATH 顶部",
+      "若 AI agent 已安装,会写入对应配置(~/.claude/settings.json 等)"
+    ],
+    "uninstallRemoved": [
+      "删除 ~/.git-ai/ 目录(二进制、config.json、缓存的 working_logs)",
+      "调用 git-ai remove-hooks 清理已注册的 AI agent hooks",
+      "移除 git 代理 shim(~/.git-ai/bin/git[.exe])"
+    ],
+    "uninstallKept": [
+      "各仓库 refs/notes/ai 下的 AI 归因 notes 不会删除,重装后可继续读取",
+      "各仓库 .git/ai/working_logs/ 历史工作日志不会删除",
+      "AI agent 配置文件本身不会被删除"
+    ]
+  },
+  "hooks": {
+    "mode": {
+      "official": "官方 hooks(git-ai install):跨平台,Claude/Cursor 自动注册,推荐。",
+      "none": "暂不配置:所有 AI agent 编辑将不打标,全部归入 unknown_additions。指标会失真。"
+    },
+    "switchSideEffects": {
+      "toOfficial": [
+        "执行 git-ai install,写入 type=command 的 hook 到 ~/.claude/settings.json 等",
+        "已存在的非 git-ai 条目(cc-switch / 用户自定义 hook)保持不变"
+      ],
+      "toNone": [
+        "清掉 ~/.claude/settings.json 内所有 git-ai 拥有的 hook 条目",
+        "保留 cc-switch / 用户自己注册的其它 hook,不动",
+        "之后 AI 编辑产出的所有行将归为 unknown_additions,指标会失真"
+      ]
+    }
+  },
+  "daemon": {
+    "staleLock": {
+      "title": "git-ai daemon 僵尸 lock",
+      "hint": "上次 daemon 进程异常退出但没释放 daemon.lock。所有 git-ai client 命令(包括 hook 触发的 checkpoint)都会被一直阻塞,报 \"daemon startup blocked: lock held at ...\"。",
+      "stepLabel": "处置:删掉下面两个文件后重试 hook —— 下次 git-ai 命令会自动拉起一个新 daemon。",
+      "copyCmdLabel": "复制清理命令"
+    },
+    "blockedLock": {
+      "title": "git-ai daemon lock 仍被占用",
+      "hint": "daemon.lock 仍被 git-ai.exe 持有,但 daemon.pid.json 缺失或不可用。此时直接删除 lock 会失败,所有 git-ai client 命令仍会报 \"daemon startup blocked: lock held at ...\"。",
+      "stepLabel": "处置:先结束持锁的 git-ai.exe,再删除 daemon.lock / daemon.pid.json,最后重试 git-ai 命令。",
+      "copyCmdLabel": "复制排查命令"
+    }
+  },
+  "stats": {
+    "degraded": {
+      "repoMissing": {
+        "title": "请先选择一个仓库",
+        "description": "Stats 需要一个具体的 git 仓库才能计算单 commit 的 AI 归因。请到「仓库」页选择或扫描添加。",
+        "cta": "前往仓库"
+      },
+      "gitAiMissing": {
+        "title": "未检测到 git-ai",
+        "description": "git-ai 二进制不存在,无法生成 stats。安装后回到本页即可。",
+        "cta": "前往安装"
+      },
+      "noHead": {
+        "title": "仓库尚无任何 commit",
+        "description": "当前仓库的 HEAD 不可读(空仓 / 首次 init),在产生第一个 commit 后再回来。"
+      }
+    },
+    "noteText": {
+      "merge": "本 commit 是 merge commit。merge 的 authorship 日志可以为空,因此 AI 行数通常为 0。",
+      "emptyAdditions": "本 commit 没有新增行(可能是纯删除 / 纯 rename / merge),所有桶为 0,占比以 — 展示。",
+      "workingLogsMissing": "本 commit 有新增行,但全部归到「未归因」,且历史也没有任何 AI 行 —— 说明对应 AI agent 在写入时没有触发 git-ai checkpoint hook。前往 Hooks 页确认。"
+    },
+    "cacheHint": {
+      "refreshedPrefix": "数据更新于",
+      "refreshNow": "立即刷新",
+      "refreshing": "刷新中…",
+      "cachePolicy": "本页 stats 数据自动每 30 秒视为过期,切 commit / 切仓库 / 点击刷新后会重取。git-ai stats --json 走本地子进程,不上传任何数据。"
+    }
+  },
+  "formula": {
+    "definition": "是什么",
+    "formula": "怎么算",
+    "example": "举例"
+  },
+  "dashboard": {
+    "metricTitles": {
+      "headAiRate": "HEAD AI 占比",
+      "windowAiTotal": "AI 生产量(窗口期)",
+      "hookCoverage": "Hook 覆盖率"
+    },
+    "metricSources": {
+      "headAiRate": "AI 行 / 总新增行(当前 HEAD)",
+      "windowAiTotal": "窗口内每个 commit 的 AI 行累加",
+      "hookCoverage": "有 git-ai 归因记录的 commit 占比"
+    },
+    "metricErrors": {
+      "headFailed": "当前 HEAD stats 读取失败",
+      "headUnavailable": "当前 HEAD stats 不可用",
+      "hookFailed": "窗口级 stats 读取失败",
+      "diagnoseCta": "环境诊断",
+      "degraded": {
+        "repoMissing": "未选仓库",
+        "gitAiMissing": "未检测到 git-ai",
+        "noHead": "仓库尚无 HEAD"
+      }
+    },
+    "degraded": {
+      "repoMissing": {
+        "title": "请先选择一个仓库",
+        "description": "Dashboard 需要一个 git 仓库才能聚合历史 stats。前往「仓库」页选择。",
+        "cta": "前往仓库"
+      },
+      "gitAiMissing": {
+        "title": "未检测到 git-ai",
+        "description": "Dashboard 历史聚合依赖 git-ai stats。安装后回到本页即可。",
+        "cta": "前往安装"
+      }
+    },
+    "emptyWindow": {
+      "title": "所选区间无 commit",
+      "descriptionTemplate": "本仓库在「{{rangeLabel}}」内没有 commit。切到更大的窗口看看?",
+      "widenCta": "切到近 90 天"
+    },
+    "chartAllZero": "窗口内的 commit 全部没有新增行(纯 merge / 纯删除 / 纯 rename),时间序列图无数据可视化。",
+    "truncatedHint": "仓库 commit 数已超过 {{cap}} 条上限,本窗口可能漏算更老 commit。改用更短时间窗或后续 P10 加分页支持。",
+    "failedHint": "本次有 {{n}} 个 commit 的 stats 采集失败,这些 commit 不计入\"生产量\"与时间序列,数字不被 0 桶兜底污染。",
+    "cacheHint": {
+      "refreshNow": "立即刷新",
+      "refreshing": "刷新中…",
+      "cachedTemplate": "{{hits}} / {{total}} 命中本地 SQLite 缓存"
+    }
+  },
+  "blame": {
+    "degraded": {
+      "repoMissing": {
+        "title": "请先选择一个仓库",
+        "description": "Blame 需要一个 git 仓库才能查行级 AI 归因。",
+        "cta": "前往仓库"
+      },
+      "gitAiMissing": {
+        "title": "未检测到 git-ai",
+        "description": "Blame 视图依赖 git-ai blame。安装后回到本页。",
+        "cta": "前往安装"
+      },
+      "noHead": {
+        "title": "仓库尚无任何 commit",
+        "description": "当前仓库 HEAD 不可读,等首次 commit 后再来。"
+      },
+      "commitNotFound": {
+        "title": "Commit 未找到",
+        "descriptionTemplate": "git 找不到 {{sha}},可能已被 rebase 重写。选另一个 commit 或回 HEAD。"
+      },
+      "fileNotInHead": {
+        "title": "此 commit 中无此文件",
+        "descriptionTemplate": "{{file}} 在该 commit 中不存在(可能是 working tree only,或后续添加)。"
+      },
+      "fileTooLarge": {
+        "title": "文件过大",
+        "descriptionTemplate": "文件 {{sizeKb}} KB 超过 {{limitKb}} KB 限额。Blame 视图为避免 IPC 卡顿不渲染。"
+      },
+      "fileBinary": {
+        "title": "Binary 文件",
+        "description": "前 8000 字节内含 NUL,视作 binary 不渲染。"
+      },
+      "noAiAuthorship": {
+        "title": "本文件无 AI 归因行",
+        "description": "git-ai blame 在此文件没识别出任何 AI 行 — 可能是纯人写,或写入时 AI agent 没装 hook。"
+      }
+    },
+    "popover": {
+      "promptHeading": "Prompt",
+      "agentLabel": "Agent",
+      "humanLabel": "人类作者",
+      "loginRequired": "未登录 git-ai,无法关联人类作者",
+      "scopeWarningRepoWide": "(整个仓库累计,非本文件局部统计)",
+      "acceptedTemplate": "采纳 {{n}} 行",
+      "overridenTemplate": "被人工覆盖 {{n}} 行",
+      "totalAdditionsTemplate": "生产 {{n}} 行",
+      "totalDeletionsTemplate": "删除 {{n}} 行",
+      "otherFilesHeading": "该 prompt 还触及的文件",
+      "otherFilesMoreTemplate": "…还有 {{n}} 个文件",
+      "commitsHeading": "出现在 commit",
+      "driftCaveat": "行内容来自最新 commit;prompt 是 AI 当时生成,**可能已被后续手工修改**,两者不必一致。",
+      "mergeCaveat": "若某行 last-touched commit 是 merge,authorship 日志可能为空(spec v3.0.0 §2.2),前端会显示为灰色非 AI。"
+    },
+    "lineLegend": {
+      "ai": "AI 归属行",
+      "nonAi": "非 AI 行(可能人类编辑、hook 未捕获或 notes 丢失)"
+    },
+    "lrange": {
+      "label": "范围(-L)",
+      "placeholder": "如 15,25",
+      "invalid": "格式无效。需 'start,end',start ≤ end,均 > 0。"
+    },
+    "fileSearchPlaceholder": "搜索文件…",
+    "fileListEmpty": "未匹配任何文件",
+    "fileListHintTemplate": "共 {{n}} 个文件;输入关键字过滤(按目录前缀模糊匹配)。",
+    "refPicker": {
+      "label": "Ref:",
+      "currentHead": "HEAD",
+      "triggerTitle": "按分支 / commit sha 过滤 blame 视图",
+      "popoverTitle": "选择 ref",
+      "resetToHead": "回到 HEAD",
+      "branchesHeading": "本地分支",
+      "noBranches": "无本地分支",
+      "branchesLoading": "读取分支中…",
+      "branchesFailed": "分支列表读取失败",
+      "shaInputHeading": "或粘贴 commit sha / tag",
+      "shaInputPlaceholder": "如 abc1234 或 v1.2.0",
+      "shaApply": "应用",
+      "shaEmpty": "请输入 sha 或 tag",
+      "refNotFoundTitle": "Ref 未找到",
+      "refNotFoundTemplate": "git 找不到 {{r}}(或不是 commit 对象)。检查拼写,或从下拉里选一个分支。",
+      "activeChipTemplate": "当前:{{r}}",
+      "searchBranchesPlaceholder": "搜索分支名…"
+    }
+  },
+  "timeRange": {
+    "pickerLabel": "时间范围",
+    "presets": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "thisWeek": "本周",
+      "lastWeek": "上周",
+      "thisMonth": "本月",
+      "lastMonth": "上月",
+      "last7Days": "近 7 天",
+      "last30Days": "近 30 天",
+      "last90Days": "近 90 天"
+    },
+    "customLabel": "自定义",
+    "customStartLabel": "开始日期",
+    "customEndLabel": "结束日期",
+    "customApply": "应用",
+    "customInvalidRange": "开始日期需早于或等于结束日期",
+    "customTooWideTemplate": "自定义范围跨度不能超过 {{max}} 天"
+  },
+  "gitAiAccount": {
+    "title": "git-ai 账号",
+    "hint": "git-ai 上游 OAuth / API key 登录态。本地归因不依赖登录;远端聚合(部门看板)需要登录。",
+    "refresh": "刷新登录态",
+    "refreshing": "读取中…",
+    "stateLoggedIn": "已登录",
+    "stateLoggedOut": "未登录",
+    "stateRefreshExpired": "凭据已过期",
+    "stateError": "登录态异常",
+    "logoutButton": "登出",
+    "logoutConfirmTitle": "确认登出 git-ai 账号",
+    "logoutConfirmDescription": "登出后会清空本机 git-ai 凭据。本地归因数据(refs/notes/ai 与 .git/ai/working_logs/)不受影响,只是远端聚合推送会失败,直到下次 git-ai login 重新登录。",
+    "logoutConfirmCta": "确认登出",
+    "logoutCancel": "取消",
+    "logoutOkToast": "已登出 git-ai。",
+    "logoutFailed": "登出失败",
+    "degradedGitAiMissing": "git-ai 未安装。请先去 Install 页安装。",
+    "cliLoginHint": "登录请在终端运行 git-ai login(Studio 暂不内置登录流程)。"
+  },
+  "showRaw": {
+    "trigger": "查看 git-ai show 原文",
+    "dialogTitleTemplate": "git-ai show {{sha}}",
+    "dialogDescription": "上游 git-ai show 命令输出的原文文本(JSON metadata + attestations),求助时直接复制此处给到对方最稳。",
+    "empty": "本 commit 没有 ai 归因数据(no authorship data)。",
+    "copyButton": "复制原文",
+    "copiedToast": "原文已复制到剪贴板。",
+    "loadFailed": "加载 git-ai show 原文失败",
+    "degradedRepoMissing": "未选仓库 — 请先在 Repo 页选一个。",
+    "degradedGitAiMissing": "git-ai 未安装 — 请先去 Install 页安装。"
+  },
+  "effectiveIgnore": {
+    "title": "当前生效的 ignore patterns",
+    "hint": "git-ai 在算 stats / blame 时实际跳过的文件路径模式。来源:默认规则 + 仓库 .gitattributes(linguist-generated) + 仓库根 .git-ai-ignore。",
+    "refresh": "重新读取",
+    "refreshing": "读取中…",
+    "listEmpty": "没有任何生效的 patterns(罕见,通常意味着 git-ai 版本异常或仓库无 .git-ai-ignore 与默认规则也未启用)。",
+    "degradedRepoMissing": "未选仓库 — 请先在 Repo 页选一个,再回到这里。",
+    "degradedGitAiMissing": "git-ai 未安装 — 请先去 Install 页安装。"
+  },
+  "chart": {
+    "human": "人类",
+    "unknown": "未归因",
+    "ai": "AI"
+  },
+  "notes": {
+    "degraded": {
+      "repoMissing": {
+        "title": "请先选择一个仓库",
+        "description": "Notes 页需要一个 git 仓库才能列出 refs/notes/ai。",
+        "cta": "前往仓库"
+      },
+      "noNotesInRepo": {
+        "title": "本仓库尚无任何 AI 归因",
+        "description": "git notes --ref=ai 为空。可能尚未提交带 checkpoint 的 commit,或 hook 未启用。前往 Hooks 页确认。",
+        "cta": "前往 Hooks"
+      }
+    },
+    "commitNoNote": {
+      "title": "该 commit 无 AI 归因",
+      "description": "git notes --ref=ai show <sha> 失败。可能是该 commit 没打过 checkpoint,或 note 已被 git-ai rewrite-authorship 移除。",
+      "viewStats": "查看 Stats"
+    },
+    "header": {
+      "schemaVersionLabel": "schema",
+      "gitAiVersionLabel": "git-ai",
+      "baseCommitShaLabel": "base",
+      "committedAtLabel": "提交于",
+      "summaryTemplate": "{{files}} 文件 · {{prompts}} prompt · {{humans}} 人类 · {{sessions}} session",
+      "viewStats": "查看 Stats",
+      "copyFullJson": "复制完整 JSON",
+      "copied": "已复制"
+    },
+    "sectionTitles": {
+      "attestations": "归因映射",
+      "prompts": "Prompts(AI session)",
+      "humans": "Humans(人类作者)",
+      "sessions": "Sessions(轻量 session)"
+    },
+    "chips": {
+      "promptLabel": "AI",
+      "humanLabel": "人类",
+      "sessionLabel": "Session"
+    },
+    "messages": {
+      "collapsedHint": "对话内容仅本机渲染,不会被上传",
+      "typeUser": "用户",
+      "typeAssistant": "助手",
+      "typeToolUse": "工具调用",
+      "noMessages": "本 prompt 无 messages 记录"
+    },
+    "actions": {
+      "copyHash": "复制 hash",
+      "copyPromptJson": "复制 prompt JSON",
+      "copyMessagesUrl": "复制链接",
+      "openBlameAtHead": "在 Blame 中查看",
+      "blameDisabledNonHead": "Blame 当前只显示 HEAD commit(P6 限制);切换到 HEAD commit 的 notes 时可启用此链接。",
+      "blameDisabledDriftCaveat": "Blame 行号基于 HEAD,与历史 commit 行号可能漂移。"
+    },
+    "searchPlaceholder": "搜索 sha / subject…",
+    "listEmpty": "未匹配任何 commit",
+    "instructions": {
+      "title": "选择左侧 commit 查看 AI 归因详情",
+      "description": "列表只展示已带 git notes --ref=ai 的 commit;选中后右侧展开 attestation 映射、prompts 对话、humans、sessions 三段。"
+    },
+    "parseFailed": {
+      "title": "Notes 解析失败",
+      "description": "git notes show 返回非预期格式。可能是 git-ai schema 漂移或 note 内容损坏。展开下方查看原始错误。",
+      "rawLabel": "原始错误信息"
+    }
+  },
+  "lowAiShare": {
+    "settingsTitle": "低 AI 占比提醒",
+    "settingsHint": "启用后,当近 7 天 AI 占比低于设定阈值时弹出提醒。默认按当前仓库 git user.email 统计;未取到邮箱时按仓库整体。每 15 分钟自检,新仓总加行数 < 50 时不打扰。默认关闭。",
+    "rulesTitle": "触发规则",
+    "rules": [
+      "统计窗口固定为近 7 天,口径为 AI 新增 / (人工新增 + 未归因新增 + AI 新增)。",
+      "关注邮箱留空时,默认读取当前仓库 `git config user.email` 并只统计该作者;读取不到才看仓库整体。",
+      "窗口总新增行数至少 50 行,且 AI 占比严格低于阈值时才触发。",
+      "切换仓库后的 5 分钟内不触发;之后按设置的提醒间隔重复检查和提醒。",
+      "用户点 X 或静默按钮后,按设置的静默时长暂停提醒。",
+      "OS 通知与应用内 toast 同时触发(macOS 通知中心 / Linux libnotify / Windows toast);如果被上述冷却挡住,OS 通知也不会发送。"
+    ],
+    "thresholdLabel": "阈值(低于此值触发)",
+    "targetEmailsLabel": "关注邮箱",
+    "targetEmailsPlaceholder": "留空 = 当前仓库 git user.email\nalice@example.com\nbob@example.com",
+    "targetEmailsHelp": "多个邮箱用逗号或换行分隔。多人仓库建议指定自己或负责人邮箱;留空会自动读取当前仓库 git user.email。",
+    "remindIntervalLabel": "提醒间隔",
+    "dismissMinutesLabel": "点 X 后静默",
+    "toastTitleWithRepoTemplate": "近 7 天 AI 占比 {{pct}}%(低于 {{threshold}}% 阈值) · {{repoName}}",
+    "toastTitleTemplate": "近 7 天 AI 占比 {{pct}}%(低于 {{threshold}}% 阈值)",
+    "toastDescription": "可在设置中永久关闭提醒。",
+    "toastActionView": "查看 Dashboard",
+    "toastActionDismissTemplate": "{{duration}}内不再提示",
+    "dismissedToastTemplate": "已忽略,{{duration}}内不再提醒。可在设置中永久关闭。"
+  },
+  "checkpoints": {
+    "degraded": {
+      "repoMissing": {
+        "title": "请先选择一个仓库",
+        "description": "Checkpoints 需要一个 git 仓库才能读 working_logs。",
+        "cta": "前往仓库"
+      },
+      "noHead": {
+        "title": "仓库尚无任何 commit",
+        "description": "checkpoint 目录按 HEAD sha 组织,空仓时无可用 base。"
+      },
+      "gitAiMissing": {
+        "title": "未检测到 git-ai",
+        "description": "mock_checkpoint 调用 git-ai CLI;请先安装。读列表本身不依赖,但 mock 入口会被禁用。",
+        "cta": "前往安装"
+      },
+      "workingLogsDirMissing": {
+        "title": "本 HEAD 下尚无 working_logs 目录",
+        "description": ".git/ai/working_logs/<HEAD>/ 不存在,通常意味着 git-ai 在此 HEAD 还没跑过 checkpoint。去 Hooks 页确认 AI agent 的 hook 已注册,或点右上\"调试\"用 mock 入口生成测试数据。",
+        "cta": "前往 Hooks"
+      }
+    },
+    "header": {
+      "pageTitle": "Checkpoints",
+      "subtitle": "working dir 视角:下一次 commit 之前的 AI / 人类编辑 checkpoint(读 .git/ai/working_logs/<HEAD>/checkpoints.jsonl)",
+      "countTemplate": "共 {{n}} 个 checkpoint",
+      "headShaLabel": "HEAD",
+      "preCommitNote": "未提交:下次 commit 会把这些归因落到 git notes,可在 Notes 页查看。",
+      "debugDropdown": "调试"
+    },
+    "kind": {
+      "human": {
+        "label": "人类",
+        "tooltip": "未追踪人类编辑(legacy / 无 IDE 扩展上报)"
+      },
+      "aiAgent": {
+        "label": "AI 代理",
+        "tooltip": "AI 代理模式:Claude Code / Cursor Composer / Cline 等大段生成"
+      },
+      "aiTab": {
+        "label": "AI 补全",
+        "tooltip": "AI 行内补全:GitHub Copilot / Cursor Tab"
+      },
+      "knownHuman": {
+        "label": "已识别人类",
+        "tooltip": "IDE 扩展明确上报为人类保存事件"
+      }
+    },
+    "card": {
+      "expand": "展开详情",
+      "collapse": "折叠",
+      "diffLabelTemplate": "diff({{lines}} 行)",
+      "agentMetadataLabel": "agent_metadata(可能含 IDE / session id,默认折叠)",
+      "lineStatsTemplate": "+{{a}} / -{{d}} 行(SLOC +{{as}} / -{{ds}})",
+      "lineAttributionOverrodeTemplate": "覆盖 {{prev}}",
+      "traceIdLabel": "trace_id",
+      "apiVersionLabel": "api",
+      "blameAtHeadButton": "在 Blame 中查看 HEAD",
+      "blameAtHeadCaveat": "Blame 显示的是 HEAD commit 的归因,与该 checkpoint 当时的 working dir 内容可能不一致。",
+      "noEntries": "本 checkpoint 无文件 entries",
+      "copyJson": "复制此 checkpoint JSON"
+    },
+    "emptyList": {
+      "title": "当前 HEAD 无 checkpoint",
+      "description": "AI agent 或人类编辑时,hook 会写入 .git/ai/working_logs/<HEAD>/checkpoints.jsonl。若此文件不存在或为空,可能是 hook 未配置(去 Hooks 页),或还未发生编辑。",
+      "ctaHooks": "前往 Hooks"
+    },
+    "mockDialog": {
+      "titleTemplate": "mock_checkpoint({{preset}})",
+      "intro": "此操作将真实写入 .git/ai/working_logs/<HEAD>/checkpoints.jsonl,用于调试。",
+      "sideEffects": [
+        "在 .git/ai/working_logs/<HEAD_SHA>/checkpoints.jsonl 追加一条 Checkpoint(kind 由 preset 决定)",
+        "受影响文件:你输入的 pathspecs;留空时 git-ai 会对当前所有 dirty 文件打标",
+        "该 checkpoint 会被 git-ai stats / status 计入,下次 commit 后进入 git notes --ref=ai",
+        "立刻被 Stats / Dashboard / Blame / Notes 视图感知(query 自动 invalidate,数字会变化)",
+        "**不可撤销**:git-ai 没有 `checkpoint reset` CLI,需要时手动删除 .git/ai/working_logs/<HEAD_SHA>/checkpoints.jsonl 或整个 sha 目录"
+      ],
+      "pathspecsLabel": "pathspecs(每行一个;留空 = 全部 dirty 文件)",
+      "pathspecsPlaceholder": "src/foo.ts\nsrc/bar/*.ts",
+      "pathspecsHelp": "相对 repo root;支持 git pathspec 语法。留空时按 git status 的实际 dirty 列表执行。",
+      "dirtyPreviewTitle": "当前 dirty 文件预览(留空将影响这些文件):",
+      "dirtyPreviewUnavailable": "无法获取 dirty 文件列表(可能 git 进程异常);执行后将匹配 git status 实际结果。",
+      "dirtyPreviewMoreTemplate": "…还有 {{n}} 个文件",
+      "dirtyPreviewTooManyWarnTemplate": "检测到 {{n}} 个 dirty 文件,建议显式传 pathspecs 避免误标。",
+      "confirmInputLabel": "输入 mock 确认",
+      "confirmPlaceholder": "mock",
+      "start": "执行 mock",
+      "cancel": "取消",
+      "starting": "启动中…",
+      "running": "执行中…",
+      "logTitle": "mock_checkpoint 执行日志(git-ai CLI 输出)",
+      "fireAndForgetHint": "git-ai CLI 是 fire-and-forget:进程退出后,daemon 仍在后台异步写盘。Dialog 关闭后约 800ms 列表自动刷新,稍后回此页可看到新 checkpoint。",
+      "doneOk": "exit 0 — git-ai CLI 已发送 checkpoint 请求",
+      "irreversibleWarn": "此操作不可撤销,git-ai-studio 无 undo 入口。"
+    },
+    "mockBusy": "已有一个 mock 任务在运行",
+    "installBusy": "安装 / 卸载任务进行中,mock 已禁用",
+    "hooksBusy": "Hooks 切换进行中,mock 已禁用"
+  },
+  "workingDir": {
+    "label": "未提交",
+    "tooltipTemplate": "未提交工作树:human {{h}} · unknown {{u}} · ai {{a}}\n点击查看详情"
+  },
+  "quickFixCatalog": {
+    "sectionTitle": "自动检测到的问题",
+    "sectionHint": "基于本地诊断结果实时匹配。点击条目查看具体修复命令,可一键复制后到终端运行,或跳转到对应页面继续操作。",
+    "empty": "未检测到异常 — 一切看起来都正常。",
+    "severityErr": "严重",
+    "severityWarn": "警告",
+    "severityInfo": "提示",
+    "dialogIntro": "下面是建议的修复步骤。命令可直接复制运行;如果你已经知道怎么做,可以直接点「前往修复」跳到对应页面。"
+  },
+  "people": {
+    "page": {
+      "title": "按人统计",
+      "subtitle": "把当前仓库窗口内的 AI 归因按 author_email 聚合;数字本地解析,不上传。",
+      "searchPlaceholder": "搜索姓名 / 邮箱…",
+      "exportCsv": "导出 CSV",
+      "refresh": "立即刷新",
+      "refreshing": "刷新中…",
+      "identityHint": "身份键 = author_email 的小写形式;同邮箱大小写差异自动归为同一行。不引 git mailmap。",
+      "cachedTemplate": "{{hits}} / {{total}} 命中本地 SQLite 缓存"
+    },
+    "degraded": {
+      "repoMissing": {
+        "title": "请先选择一个仓库",
+        "description": "按人统计需要一个 git 仓库才能按 author 聚合 commit。前往「仓库」页选择。",
+        "cta": "前往仓库"
+      },
+      "gitAiMissing": {
+        "title": "未检测到 git-ai",
+        "description": "按人统计依赖 git-ai stats。安装后回到本页即可。",
+        "cta": "前往安装"
+      }
+    },
+    "emptyWindow": {
+      "title": "所选区间无 commit",
+      "description": "当前窗口内没有任何 commit,无法按人聚合。"
+    },
+    "emptySearch": {
+      "title": "未匹配任何作者",
+      "description": "试着清空搜索框,或换关键字。"
+    },
+    "failedHintTemplate": "本次有 {{n}} 个 commit 的 stats 采集失败,这些 commit 计入「commits 数」但不参与 AI/人工/未归因累加,数字不被 0 桶兜底污染。",
+    "truncatedHintTemplate": "仓库 commit 数已超过 {{cap}} 条上限,本窗口可能漏算更老 commit。改用更短时间窗后再聚合。",
+    "metricTitles": {
+      "totalCommits": "总 commit 数",
+      "totalHuman": "人工新增行(合计)",
+      "totalAi": "AI 行(合计)",
+      "overallAiRate": "整体 AI 占比"
+    },
+    "tableHeaders": {
+      "authorName": "姓名",
+      "authorEmail": "邮箱",
+      "commits": "commits",
+      "humanAdditions": "人工新增",
+      "unknownAdditions": "未归因",
+      "aiAdditions": "AI 行",
+      "totalAdditions": "总新增",
+      "aiShare": "AI 占比"
+    },
+    "rowCommits": {
+      "heading": "Commit 列表(点击跳转 Stats)",
+      "empty": "无 commit",
+      "mergeChip": "merge",
+      "failedChip": "采集失败",
+      "aiTemplate": "AI +{{n}}",
+      "humanTemplate": "人工 +{{n}}"
+    }
+  },
+  "changedFiles": {
+    "title": "本 commit 改动文件",
+    "empty": "本 commit 无改动文件(可能是空提交)。",
+    "loading": "正在解析改动文件…",
+    "failedPrefix": "加载改动文件失败",
+    "invalidSha": "该 sha 在本地仓库不存在或不是合法 commit。",
+    "status": {
+      "A": "新增",
+      "M": "修改",
+      "D": "删除",
+      "R": "重命名",
+      "C": "复制",
+      "T": "类型变更",
+      "U": "冲突",
+      "X": "未知",
+      "B": "拆分"
+    },
+    "aiLineChipTemplate": "{{n}} 行 AI",
+    "jumpBlameTitle": "在 Blame 中查看(锁定到该 commit)"
+  },
+  "authorsJumpBlame": {
+    "noAiLinesDisabled": "该作者在本窗口内的 commit 都没有 AI 归因行,无法跳转",
+    "jumpTitle": "在 Blame 中查看该作者最新 commit 的 AI 行"
+  },
+  "diagnostic": {
+    "check": {
+      "gitAiBinaryLabel": "git-ai 二进制存在",
+      "gitAiBinaryImpact": "所有 AI 归因指标都无法生成(没有打标工具就没有 stats / blame / notes)",
+      "gitAiBinaryFix": "前往安装",
+      "gitAiVersionLabel": "git-ai 版本",
+      "gitAiVersionImpactWarn": "该版本已被标记为有已知问题。本地 stats 不受影响,但远端聚合(部门看板)的统计数据可能失真。",
+      "gitAiVersionFix": "更换版本",
+      "gitShimLabel": "git 代理 shim 已生效",
+      "gitShimErrDetail": "where/which 都没找到 git 二进制",
+      "gitShimErrImpact": "git 命令本身缺失,git-ai 的代理拦截链路无从启动",
+      "gitShimGoInstall": "前往安装",
+      "gitShimFirstIsShimTemplate": "第一行 = {{expected}}",
+      "gitShimMismatchTemplate": "首个候选 {{actual}} ≠ {{expected}}",
+      "gitShimMismatchImpact": "PATH 顺序错误时 git 命令会走系统原生而非 git-ai 代理,commit 不会触发归因,stats 全为 0",
+      "gitShimReinstall": "重新安装",
+      "loginLabel": "git-ai 登录态",
+      "loginImpactNotLoggedIn": "本地归因仍可工作,但远端聚合(部门看板)的推送可能失败",
+      "loginFix": "查看登录指引",
+      "inRepoLabel": "当前位于 git 仓库内",
+      "inRepoImpactMissing": "未选仓库或所在目录无 .git 时,所有指标不可计算",
+      "inRepoFix": "选择仓库",
+      "coreHooksPathLabel": "仓库 core.hooksPath 未污染",
+      "coreHooksPathImpactWarn": "自定义 hooksPath 可能让 git-ai 的代理 hook 失效。如果你确认该路径内已包含 git-ai 的 post-commit / prepare-commit-msg,可以忽略此项。",
+      "coreHooksPathFixWarn": "查看 Hooks",
+      "anyAgentConfiguredLabel": "至少检测到一个已配置 AI agent",
+      "anyAgentConfiguredDetailTemplate": "已配置 {{configured}} 个 / 共 {{total}} 个 Agent",
+      "anyAgentConfiguredImpactErr": "没有任何 agent 的 checkpoint 入口,所有编辑都会被归为 unknown_additions",
+      "anyAgentConfiguredFix": "配置 Hooks",
+      "workingLogsLabel": "当前 HEAD 有 checkpoint 记录",
+      "workingLogsDetailTemplate": "{{n}} 个 .jsonl 文件",
+      "workingLogsDetailNoRepo": "未选仓库",
+      "workingLogsImpactEmpty": "当前 HEAD 下还没有 checkpoint。新装好后 AI 写代码、保存才会产生;commit 后归因才会落到 git notes。",
+      "envLabel": "关键 GIT_AI_* 环境变量未异常覆盖",
+      "envDetectedTemplate": "检测到 {{var}} 被显式设置",
+      "envNormal": "未设置(正常)",
+      "envImpactWarn": "环境变量可能让客户端使用了不同于实际安装的二进制,引发解析与统计偏差",
+      "agentDetectedFalseTemplate": "{{agent}} 配置存在",
+      "agentDetectedFalseDetail": "未检测到该 Agent",
+      "agentConfiguredTrueTemplate": "{{agent}} 已注册 git-ai checkpoint hook",
+      "agentConfiguredDetail": "已配置",
+      "agentConfiguredImpactErrTemplate": "{{agent}} 编辑的代码不会触发 checkpoint,该 agent 产出的所有 AI 行会归为 unknown",
+      "agentConfiguredFixErr": "修复 hooks"
+    },
+    "overviewChips": {
+      "gitAi": "git-ai",
+      "gitShim": "Git Shim",
+      "login": "Login",
+      "hooks": "Hooks",
+      "repo": "Repo"
+    }
+  },
+  "logs": {
+    "page": {
+      "title": "日志",
+      "intro": "本页所有日志均在本机读取与渲染。可能含本机路径、API key 片段或 git-ai 子进程异常文本,留意复制分享时的脱敏。"
+    },
+    "tabs": {
+      "debug": "git-ai 诊断",
+      "app": "应用日志"
+    },
+    "debug": {
+      "intro": "运行一次 git-ai debug 并实时显示 stdout/stderr。Diagnostic 页是结构化解析视图,本页提供原文流(便于复制给同事 / 提 issue)。",
+      "runButton": "运行 git-ai debug",
+      "rerunButton": "重新运行",
+      "running": "运行中…",
+      "copyAll": "复制全部",
+      "copyDone": "已复制",
+      "emptyIdle": "点击按钮开始,输出会流式显示在下方。",
+      "noGitAi": {
+        "title": "git-ai 未安装",
+        "detail": "请先到 Install 页安装 git-ai。",
+        "cta": "前往安装"
+      },
+      "exitTemplate": "子进程退出 (exit {{code}},耗时 {{seconds}}s)",
+      "failed": "运行失败,请查看上方输出。"
+    },
+    "viewer": {
+      "refresh": "刷新",
+      "refreshing": "刷新中…",
+      "autoRefresh": "自动刷新(5s)",
+      "openInExplorer": "在资源管理器中打开",
+      "sizeKbTemplate": "{{kb}} KB",
+      "truncatedBadgeTemplate": "已截断,仅显示尾部 {{kb}} KB",
+      "mtimeUnknown": "时间未知",
+      "loadFailed": "读取日志失败"
+    },
+    "app": {
+      "title": "应用自身日志",
+      "hint": "tauri-plugin-log 默认目标。单文件最大 40KB,超出后自动覆盖(KeepOne 轮转)。",
+      "empty": {
+        "title": "尚无应用日志",
+        "detail": "应用刚启动 / 还没有日志输出。运行几次操作后再回来查看。"
+      }
+    }
+  },
+  "manual": {
+    "page": {
+      "title": "用户手册",
+      "subtitle": "git-ai 常用命令、指标口径与常见问题排查。所有解析在本机完成,不上传数据。"
+    },
+    "tabs": {
+      "commands": "git-ai 命令",
+      "metrics": "指标口径",
+      "troubleshooting": "问题排查"
+    },
+    "commands": {
+      "hint": "以下命令以 git-ai 官方 README 与本工具实际调用为准。多数操作已封装为按钮,这里供你在终端手动核对 / 排查时参考。",
+      "items": [
+        {
+          "cmd": "git-ai install",
+          "desc": "安装 / 修复 git-ai,并为受支持的 AI agent 写入 checkpoint hook(幂等,已正确配置的 agent 不会被改动)。",
+          "example": "git-ai install"
+        },
+        {
+          "cmd": "git-ai install-hooks",
+          "desc": "仅(重新)写入各 agent 的托管 hook 文件,例如 Claude 的 settings.json、OpenCode 的 plugin。",
+          "example": "git-ai install-hooks"
+        },
+        {
+          "cmd": "git-ai stats",
+          "desc": "输出当前仓库的 AI 归属统计;加 --json 出机器可读结构;可指定 commit 区间。",
+          "example": "git-ai stats --json\ngit ai stats <start_sha>..<end_sha> --json"
+        },
+        {
+          "cmd": "git-ai blame <path>",
+          "desc": "git blame 的 AI 归属增强版,逐行标注由哪个 agent / prompt 生成。支持所有标准 git blame flag。",
+          "example": "git-ai blame src/log_fmt/authorship_log.rs"
+        },
+        {
+          "cmd": "git-ai checkpoint <agent> --hook-input stdin",
+          "desc": "由 agent 的编辑 hook 自动调用,把每次 AI 编辑链接到模型 / agent / prompt。一般不手动执行,排查时可看它是否报错。",
+          "example": "echo \"{}\" | git-ai checkpoint claude --hook-input stdin"
+        },
+        {
+          "cmd": "/ask skill",
+          "desc": "git-ai 在 ~/.agents/skills/ 安装的技能:可向写代码的 agent 追问它的指令、决策与任务意图。在 agent 里直接用 /ask。",
+          "example": "(在你的 AI agent 对话里输入) /ask"
+        }
+      ]
+    },
+    "metrics": {
+      "hint": "指标定义与本工具 Stats / 按人统计 页完全同源(formulas.ts)。total = 人工 + 未归因 + AI 三桶并列。",
+      "kindRaw": "原始",
+      "kindDerived": "派生",
+      "examplePrefix": "例:"
+    },
+    "copy": {
+      "label": "复制",
+      "done": "已复制",
+      "aria": "复制命令"
+    },
+    "troubleshooting": {
+      "items": [
+        {
+          "q": "hook 报 \"daemon startup blocked: lock held at ...daemon.lock\"",
+          "a": [
+            {
+              "kind": "text",
+              "text": "上次 git-ai daemon 异常退出但没释放文件锁,所有 hook 命令会被一直阻塞。环境诊断页顶部会出现僵尸 lock 横幅,按提示删掉 daemon.lock 与 daemon.pid.json 两个文件后重试 —— 下次 git-ai 命令会自动拉起新的 daemon。"
+            }
+          ]
+        },
+        {
+          "q": "指标全是「未归因」/ stats 掉零",
+          "a": [
+            {
+              "kind": "text",
+              "text": "说明 AI agent 编辑时没有触发 git-ai checkpoint hook。到环境诊断看各 agent 的 hook 状态,对未配置项点「修复此项」;改完必须重启对应 agent 并重开终端。"
+            }
+          ]
+        },
+        {
+          "q": "本地 blame 有 AI 标注,但远端团队看板统计不到",
+          "a": [
+            {
+              "kind": "text",
+              "text": "AI 归属存在 refs/notes/ai。git-ai 的 post-push hook 通常会在 git push 之后自动把该 ref 同步到远端;若团队看板仍看不到,可手动执行下面三步同步:"
+            },
+            {
+              "kind": "cmd",
+              "cmd": "git fetch origin refs/notes/ai:refs/notes/ai_remote",
+              "caption": "先把远程 AI notes 拉下来到临时 tracking ref。"
+            },
+            {
+              "kind": "cmd",
+              "cmd": "git notes --ref ai merge refs/notes/ai_remote",
+              "caption": "把远程 AI notes 与本地 refs/notes/ai 合并。"
+            },
+            {
+              "kind": "cmd",
+              "cmd": "git push origin refs/notes/ai",
+              "caption": "把合并后的 AI notes 推回远端。"
+            },
+            {
+              "kind": "text",
+              "text": "本质是同步 AI 元数据(Git Notes),不是同步代码。不要自己配 git config --global remote.origin.push=refs/notes/* —— 通配会把 git-ai 的 tracking ref refs/notes/ai-remote/* 一起推到远端,影响其他仓库与用 notes 的工具,与 git-ai 实践相悖。"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "nav": {
+    "appName": "Git AI Studio",
+    "appTagline": "本地 AI 代码归因",
+    "dashboard": "Dashboard",
+    "commits": "提交详情",
+    "people": "按人统计",
+    "blame": "Blame 行级",
+    "notes": "git notes",
+    "checkpoints": "Checkpoints",
+    "diagnostic": "环境诊断",
+    "install": "安装升级",
+    "hooks": "Hooks 配置",
+    "logs": "日志",
+    "manual": "用户手册",
+    "footer": "v0.1.0 · 本机解析,不上传数据"
+  },
+  "rail": {
+    "group": {
+      "analysis": "分析",
+      "config": "配置",
+      "help": "帮助"
+    }
+  },
+  "topBar": {
+    "noRepo": "未选仓库",
+    "noRepoSelected": "未选仓库",
+    "recentRepos": "最近打开",
+    "noRecentRepos": "暂无最近仓库",
+    "searchRepoPlaceholder": "搜索仓库名 / 路径…",
+    "manageRepos": "管理仓库…",
+    "settingsTooltip": "设置",
+    "shaCopied": "HEAD SHA 已复制",
+    "repoSwitched": "已切换仓库",
+    "repoSwitchFailed": "切换失败",
+    "copyShaAria": "复制 HEAD SHA",
+    "copyShaTitle": "复制完整 HEAD SHA",
+    "branch": {
+      "triggerTitle": "切换分支(脏树会被拒切)",
+      "searchPlaceholder": "搜索分支名...",
+      "noMatch": "无匹配分支",
+      "heading": "切换分支",
+      "loading": "读取中…",
+      "noLocalBranches": "无本地分支",
+      "dirtyTitle": "工作树有 {{n}} 个未提交改动,无法切换到 {{name}}",
+      "dirtyDescription": "请先去 Checkpoints 暂存或提交后再试",
+      "moreFiles": "…等 {{n}} 个文件",
+      "notFound": "分支 {{name}} 不存在",
+      "switchFailed": "切换失败",
+      "switched": "已切换到分支 {{branch}}",
+      "switchToFailed": "切换到 {{name}} 失败"
+    }
+  },
+  "onboarding": {
+    "title": "三步完成设置,开始看 AI 写了哪些行",
+    "description": "Git AI Studio 依赖外部 git-ai CLI:装好 git-ai、选一个本地仓库、给 AI agent 配好 hook,Dashboard 才有数据。",
+    "checklist": {
+      "gitAi": "安装 git-ai CLI",
+      "repo": "选择本地仓库",
+      "hook": "为 AI agent 配置 hook"
+    },
+    "cta": "完成设置",
+    "skip": "暂时跳过"
+  },
+  "deepLink": {
+    "viewCheckpoints": "查看 checkpoints",
+    "viewCheckpointsHint": "本 HEAD 的 working_logs 原始 checkpoint 记录"
+  },
+  "settings": {
+    "language": {
+      "label": "界面语言",
+      "hint": "切换后立即生效;选择会保存在本地 localStorage。",
+      "zh_CN": "简体中文",
+      "en": "English"
+    }
+  },
+  "repo": {
+    "title": "仓库管理",
+    "subtitle": "配置扫描根目录,然后选一个仓库作为后续诊断与统计的对象。",
+    "current": "当前",
+    "toast": {
+      "saveRootsFailed": "保存扫描根目录失败",
+      "switched": "已切换仓库",
+      "switchFailed": "切换仓库失败",
+      "openFolderFailed": "打开文件夹失败",
+      "openPickerFailed": "打开目录选择器失败"
+    },
+    "scanRoots": {
+      "title": "扫描根目录",
+      "rescan": "重新扫描",
+      "emptyHint": "还没添加目录。建议添加你保存代码的总目录,例如",
+      "remove": "移除",
+      "pickDir": "选择目录",
+      "pickDialogTitle": "选择扫描根目录",
+      "noDirPicked": "未选择目录",
+      "add": "添加",
+      "pasteAdvanced": "直接粘路径(高级)",
+      "pastePlaceholder": "例如 D:\\script"
+    },
+    "recent": {
+      "title": "最近打开",
+      "open": "打开 →"
+    },
+    "all": {
+      "title": "全部仓库",
+      "filterPlaceholder": "按名称或路径过滤",
+      "empty": "没有匹配的仓库。请检查扫描根目录或过滤词。"
+    },
+    "row": {
+      "dirty": "未提交",
+      "checkpointCount": "{{n}} 个 checkpoint",
+      "gitAiEmpty": ".git/ai 空",
+      "openInExplorer": "在文件管理器打开",
+      "selected": "已选中",
+      "switching": "切换中",
+      "select": "选中"
+    }
+  },
+  "update": {
+    "available": "发现新版本 v{{version}},点击查看并安装",
+    "checkForUpdates": "检查更新",
+    "downloadAndInstall": "下载并安装 v{{version}}",
+    "downloading": "下载中…",
+    "downloadingPercent": "下载中… {{percent}}%",
+    "upToDate": "已是最新版本",
+    "checkFailed": "检查更新失败",
+    "installFailed": "下载或安装更新失败"
+  }
+}

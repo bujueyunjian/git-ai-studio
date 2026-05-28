@@ -1,0 +1,220 @@
+import { invoke } from "@tauri-apps/api/core";
+import type {
+  AgentHookStatus,
+  AgentKind,
+  AiLinesResult,
+  ApplyResult,
+  AppSettings,
+  AppSettingsPatch,
+  ChangedFilesResult,
+  ClaudeSettingsView,
+  BlameResult,
+  CacheScope,
+  CommitBrief,
+  DaemonRepairResult,
+  DiagnosticOverview,
+  FilesListPayload,
+  HistoryResult,
+  PeopleBreakdownResult,
+  RangeSummaryResult,
+  TimeRange,
+  ReadFileResult,
+  GitAiConfig,
+  GitAiConfigPatch,
+  HooksMode,
+  HooksStatus,
+  InstallHistoryEntry,
+  InstalledVersion,
+  CheckoutResult,
+  CheckpointsResult,
+  DirtyFilesPayload,
+  EffectiveIgnorePatternsResult,
+  ListBranchesResult,
+  LogFilePayload,
+  LogKind,
+  MockPreset,
+  NotesListResult,
+  ReleasesPayload,
+  RepoEntry,
+  SettingsBackup,
+  ShowNoteResult,
+  ShowRawResult,
+  StatsResult,
+  WhoamiResult,
+} from "./types";
+
+/**
+ * 统一的 invoke 封装。
+ * - 错误统一抛 Error,前端用 try/catch 或 React Query 的 isError 处理。
+ * - 字符串错误透传;对象错误 JSON 化以便 toast 展示。
+ */
+export async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(cmd, args);
+  } catch (e) {
+    throw new Error(typeof e === "string" ? e : JSON.stringify(e), { cause: e });
+  }
+}
+
+// P0 联调
+export const ping = () => call<string>("ping");
+export const resolveGitAiPath = () => call<[boolean, string]>("resolve_git_ai_path");
+
+// 诊断
+export const diagnoseEnvironment = (force = false) =>
+  call<DiagnosticOverview>("diagnose_environment", { force });
+export const invalidateDiagnosticCache = () => call<void>("invalidate_diagnostic_cache");
+export const checkAgentHooks = (agent: AgentKind) =>
+  call<AgentHookStatus>("check_agent_hooks", { agent });
+
+// 仓库
+export const discoverRepos = (roots: string[], maxDepth?: number) =>
+  call<RepoEntry[]>("discover_repos", { roots, maxDepth });
+export const selectRepo = (path: string) => call<RepoEntry>("select_repo", { path });
+export const currentRepo = () => call<RepoEntry | null>("current_repo");
+export const currentGitUserEmail = () => call<string | null>("current_git_user_email");
+export const detectDirty = (path: string) => call<boolean | null>("detect_dirty", { path });
+export const listRecentRepos = () => call<string[]>("list_recent_repos");
+export const listScanRoots = () => call<string[]>("list_scan_roots");
+export const setScanRoots = (roots: string[]) => call<void>("set_scan_roots", { roots });
+export const restoreLastRepo = () => call<RepoEntry | null>("restore_last_repo");
+export const openInExplorer = (path: string) => call<void>("open_in_explorer", { path });
+
+// Install
+export const listReleases = (force = false) => call<ReleasesPayload>("list_releases", { force });
+export const getInstalledVersion = () => call<InstalledVersion>("get_installed_version");
+export const isInstallRunning = () => call<string | null>("is_install_running");
+export const installGitAi = (jobId: string, version?: string) =>
+  call<number>("install_git_ai", { jobId, version: version ?? null });
+export const uninstallGitAi = (jobId: string, confirmToken: string) =>
+  call<void>("uninstall_git_ai", { jobId, confirmToken });
+export const getGitAiConfig = () => call<GitAiConfig>("get_git_ai_config");
+export const setGitAiConfig = (patch: GitAiConfigPatch) =>
+  call<GitAiConfig>("set_git_ai_config", { patch });
+export const setAutoUpdate = (enabled: boolean) =>
+  call<GitAiConfig>("set_auto_update", { enabled });
+export const getInstallHistory = () => call<InstallHistoryEntry[]>("install_history");
+
+// Hooks
+export const getHooksStatus = () => call<HooksStatus>("get_hooks_status");
+export const readClaudeSettings = () => call<ClaudeSettingsView>("read_claude_settings");
+export const listSettingsBackups = () => call<SettingsBackup[]>("list_settings_backups");
+export const restoreClaudeSettings = (jobId: string, backupPath: string) =>
+  call<void>("restore_claude_settings", { jobId, backupPath });
+export const claudeSettingsMerge = (jobId: string, mode: HooksMode) =>
+  call<ApplyResult>("claude_settings_merge", { jobId, mode });
+export const diagnoseGitAiDaemon = () =>
+  call<import("./types").DaemonHealth>("diagnose_git_ai_daemon");
+export const repairGitAiDaemon = () => call<DaemonRepairResult>("repair_git_ai_daemon");
+export const installHooksOfficial = (jobId: string) =>
+  call<number>("install_hooks_official", { jobId });
+/**
+ * 为单个 AI agent 触发 hook 修复(P0b)。
+ *
+ * 现状(2026-05):上游 git-ai `install-hooks` 子命令未提供 `--agents` 过滤参数,
+ * 后端实际仍调 `git-ai install`(全装,idempotent)。对已正确配置的其它 agent 是 no-op,
+ * 只对该 agent + 任何其它缺失项做补全。长期方向:推上游加 `--agents <id>` 后切到精确单装。
+ *
+ * 与 `installHooksOfficial` 的区别:UI 语义是"为该 agent 修复",日志前缀也会标明
+ * 目标 agent;两者底层调同一 CLI,锁串行。
+ */
+export const installHooksForAgent = (jobId: string, agent: AgentKind) =>
+  call<number>("install_hooks_for_agent", { jobId, agent });
+
+// Stats(P4)
+export const getCommitStats = (sha?: string | null) =>
+  call<StatsResult>("get_commit_stats", { sha: sha ?? null });
+export const getCommitStatus = () => call<StatsResult>("get_commit_status");
+export const listRecentCommits = (maxCount: number) =>
+  call<CommitBrief[]>("list_recent_commits", { maxCount });
+
+// History / Dashboard(P5 / P11-A 时间筛选)
+export const getHistory = (range: TimeRange) => call<HistoryResult>("get_history", { range });
+// range 聚合(hook 覆盖率)独立命令:固有耗时长 + 自带缓存,Dashboard 独立 query 驱动。
+export const getRangeSummary = (range: TimeRange) =>
+  call<RangeSummaryResult>("get_range_summary", { range });
+export const clearStatsCache = (scope: CacheScope) => call<number>("clear_stats_cache", { scope });
+
+// People breakdown(P12 按人 + 时间范围)
+export const getPeopleBreakdown = (range: TimeRange) =>
+  call<PeopleBreakdownResult>("get_people_breakdown", { range });
+
+// Blame(P6/P10):后端使用上游 `git-ai blame-analysis --json '<payload>'` 机器命令。
+export const getBlame = (file: string, ranges: Array<[number, number]> | null) =>
+  call<BlameResult>("get_blame", { file, ranges });
+export const listFilesAtHead = (sha: string | null) =>
+  call<FilesListPayload>("list_files_at_head", { sha });
+export const readFileAtHead = (sha: string | null, file: string) =>
+  call<ReadFileResult>("read_file_at_head", { sha, file });
+
+// Blame ref 维度(分支 / commit sha 过滤):ref=null 等价 HEAD,与上面三个旧入口同源。
+// 后端参数名是 Rust 关键字 `ref`,Tauri JSON 协议接收时原样传入即可。
+export const getBlameAtRef = (
+  ref: string | null,
+  file: string,
+  ranges: Array<[number, number]> | null,
+) => call<BlameResult>("get_blame_at_ref", { ref, file, ranges });
+export const listFilesAtRef = (ref: string | null) =>
+  call<FilesListPayload>("list_files_at_ref", { ref });
+export const readFileAtRef = (ref: string | null, file: string) =>
+  call<ReadFileResult>("read_file_at_ref", { ref, file });
+
+// Notes(P7)
+export const listAiNotes = () => call<NotesListResult>("list_ai_notes");
+export const showAiNote = (sha: string) => call<ShowNoteResult>("show_ai_note", { sha });
+
+// Diff(任务 #2:Dashboard/Commit 详情跳转代码 — 改动文件 + AI 行)
+export const listChangedFilesInCommit = (sha: string) =>
+  call<ChangedFilesResult>("list_changed_files_in_commit", { sha });
+export const listAiLinesInCommit = (sha: string) =>
+  call<AiLinesResult>("list_ai_lines_in_commit", { sha });
+
+// Checkpoints(P8)
+export const listCheckpoints = (sha?: string | null) =>
+  call<CheckpointsResult>("list_checkpoints", { sha: sha ?? null });
+export const isMockRunning = () => call<string | null>("is_mock_running");
+export const gitStatusPorcelain = () => call<DirtyFilesPayload>("git_status_porcelain");
+export const mockCheckpoint = (
+  jobId: string,
+  preset: MockPreset,
+  pathspecs: string[],
+  confirmToken: string,
+) =>
+  call<number>("mock_checkpoint", {
+    jobId,
+    preset,
+    pathspecs,
+    confirmToken,
+  });
+
+// Logs(P9)
+export const readLogFile = (kind: LogKind, maxBytes?: number) =>
+  call<LogFilePayload>("read_log_file", { kind, maxBytes: maxBytes ?? null });
+export const runGitAiDebugReport = (jobId: string) =>
+  call<number>("run_git_ai_debug_report", { jobId });
+export const openLogDir = (kind: LogKind) => call<void>("open_log_dir", { kind });
+
+// Auth / Show raw(P11-D)
+export const getWhoami = () => call<WhoamiResult>("get_whoami");
+export const logoutGitAi = () => call<void>("logout_git_ai");
+export const getShowRaw = (sha: string) => call<ShowRawResult>("get_show_raw", { sha });
+
+// Branches(E4/E5)
+export const listBranches = () => call<ListBranchesResult>("list_branches");
+export const checkoutBranch = (name: string) => call<CheckoutResult>("checkout_branch", { name });
+
+// Ignore patterns
+export const listEffectiveIgnorePatterns = () =>
+  call<EffectiveIgnorePatternsResult>("list_effective_ignore_patterns");
+
+// Settings
+export const getAppSettings = () => call<AppSettings>("get_app_settings");
+export const setAppSettings = (patch: AppSettingsPatch) =>
+  call<AppSettings>("set_app_settings", { patch });
+export const exportAppSettings = () => call<string>("export_app_settings");
+export const importAppSettings = (json: string) =>
+  call<AppSettings>("import_app_settings", { json });
+
+// 应用「开机自启」:真源为操作系统登录项,非 app config(不落 config.json)。
+export const getAutoLaunchStatus = () => call<boolean>("get_auto_launch_status");
+export const setAutoLaunch = (enabled: boolean) => call<boolean>("set_auto_launch", { enabled });

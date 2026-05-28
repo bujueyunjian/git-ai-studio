@@ -1,0 +1,46 @@
+name: CI (cross-platform smoke)
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-cross-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-smoke:
+    name: Rust smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14   # Apple Silicon
+          - os: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-smoke-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-smoke-
+
+      - name: Frontend dist placeholder
+        shell: bash
+        run: mkdir -p dist
+
+      - name: cargo check (catches platform-specific compile errors)
+        run: cargo check --manifest-path src-tauri/Cargo.toml --all-targets
+
+      - name: cargo test (catches platform-specific test failures)
+        run: cargo test --manifest-path src-tauri/Cargo.toml

@@ -1,0 +1,191 @@
+@import "tailwindcss";
+
+/* tw-animate-css 提供 animate-in / fade-in / slide-in / accordion-* 等 utility(ADR-005)。
+ * 改用 @import 而非 v3 风格 @plugin,符合 shadcn v4 默认栈。 */
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * 字体 token。色板 token 在下方 @theme inline 里单源映射到 oklch 的 CSS 变量。
+ */
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", PingFang SC, Hiragino Sans GB, Microsoft YaHei,
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/*
+ * 主题色单源:对齐参考项目 cc-switch 的 HSL 主题。中性色走 hue-240 蓝调灰阶
+ * (非零彩度,避免"死灰";深色基底 240 5% 12% 偏暖,贴近 macOS 原生暗色),
+ * 品牌色 --primary / --ring 走 cc-switch 蓝 210 100% 56%(深色 54%),--chart-* 多色相。
+ * 语义类 bg-background / bg-primary / text-primary / ring-ring / bg-chart-* 经下方
+ * @theme inline 桥接到这些 CSS 变量。
+ *
+ * # 为什么不直接写 bg-slate-950 dark:bg-slate-900 一通
+ * 散布全站的"自选 slate 阶梯"会随作者品味漂移,深色模式整体偏冷蓝。语义变量让深色与浅色
+ * 同步,改一处即可全站换肤。
+ *
+ * # 品牌蓝 = cc-switch 蓝 hsl(210 100% 56%)(深色 54%)
+ * 也是 AI 归因的语义色:StatsBar 的 AI 段 bg-primary、Dashboard 趋势图 text-primary;
+ * Blame 行级走 chartColors.ts ai 桶(CodeMirror 需 hex,取相近蓝 #3b82f6/#60a5fa)。
+ */
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    @apply font-sans antialiased;
+  }
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(240 10% 3.9%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(240 10% 3.9%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(240 10% 3.9%);
+  --primary: hsl(210 100% 56%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(240 4.8% 95.9%);
+  --secondary-foreground: hsl(240 5.9% 10%);
+  --muted: hsl(240 4.8% 95.9%);
+  --muted-foreground: hsl(240 3.8% 46.1%);
+  --accent: hsl(240 4.8% 95.9%);
+  --accent-foreground: hsl(240 5.9% 10%);
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(240 5.9% 90%);
+  --input: hsl(240 5.9% 90%);
+  --ring: hsl(210 100% 56%);
+  --chart-1: oklch(0.623 0.214 259.815);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.606 0.25 292.717);
+  --chart-5: oklch(0.656 0.241 354.308);
+  --radius: 0.625rem;
+  --sidebar: hsl(240 4.8% 97.9%);
+  --sidebar-foreground: hsl(240 10% 3.9%);
+  --sidebar-primary: hsl(210 100% 56%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(240 5.9% 90%);
+  --sidebar-ring: hsl(210 100% 56%);
+  color-scheme: light dark;
+}
+
+.dark {
+  --background: hsl(240 5% 12%);
+  --foreground: hsl(0 0% 98%);
+  --card: hsl(240 5% 16%);
+  --card-foreground: hsl(0 0% 98%);
+  --popover: hsl(240 5% 16%);
+  --popover-foreground: hsl(0 0% 98%);
+  --primary: hsl(210 100% 54%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(240 5% 18%);
+  --secondary-foreground: hsl(0 0% 98%);
+  --muted: hsl(240 5% 18%);
+  --muted-foreground: hsl(240 5% 64.9%);
+  --accent: hsl(240 5% 18%);
+  --accent-foreground: hsl(0 0% 98%);
+  --destructive: hsl(0 62.8% 30.6%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(240 5% 24%);
+  --input: hsl(240 5% 24%);
+  --ring: hsl(210 100% 54%);
+  --chart-1: oklch(0.707 0.165 254.624);
+  --chart-2: oklch(0.765 0.177 163.223);
+  --chart-3: oklch(0.828 0.189 84.429);
+  --chart-4: oklch(0.702 0.183 293.541);
+  --chart-5: oklch(0.718 0.202 349.761);
+  --sidebar: hsl(240 5% 14%);
+  --sidebar-foreground: hsl(0 0% 98%);
+  --sidebar-primary: hsl(210 100% 54%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 5% 18%);
+  --sidebar-accent-foreground: hsl(0 0% 98%);
+  --sidebar-border: hsl(240 5% 24%);
+  --sidebar-ring: hsl(210 100% 54%);
+  color-scheme: dark;
+}

@@ -1,0 +1,52 @@
+name: Feature request
+description: Suggest a feature or improvement
+title: "[feat] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion. Before opening, please skim [`docs/product/PR-FAQ.md`](../blob/main/docs/product/PR-FAQ.md) — it states the project's scope and what we've deliberately left out. Features outside that scope are likely to be declined.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this feature solve?
+      description: Describe the use case in your own words. Avoid jumping to a solution before stating the problem.
+      placeholder: "When I review a teammate's PR, I want to see which functions in the diff were AI-authored so I can adjust my review depth accordingly. Currently I have to open Blame separately for each touched file."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like the app to do?
+      placeholder: "Add an 'AI authorship overlay' toggle to the PR view that tints diff lines by the model that wrote them, reusing the Blame view's color scheme."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: What else did you try, and why isn't it sufficient?
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Where does this belong?
+      description: Be honest — some ideas are better filed against upstream `git-ai` instead of this GUI.
+      options:
+        - git-ai-studio (this repo) — affects the GUI rendering or local UX
+        - git-ai (upstream CLI) — needs a new CLI capability or note format
+        - Both — needs upstream change plus GUI integration
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context (optional)
+      description: Screenshots, mockups, links to similar features in other tools.

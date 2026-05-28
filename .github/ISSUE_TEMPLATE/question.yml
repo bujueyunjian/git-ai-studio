@@ -1,0 +1,37 @@
+name: Question
+description: Ask how to use or configure something
+title: "[question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening, please check:
+        - [`README.md`](../blob/main/README.md) — install, quick start, status
+        - [`docs/product/PR-FAQ.md`](../blob/main/docs/product/PR-FAQ.md) — what the project is and isn't
+        - [`docs/adr/`](../blob/main/docs/adr/) — architectural decisions
+        - Existing issues — someone may have asked the same thing
+
+        Questions about the **upstream `git-ai` CLI** belong on the [`git-ai` repo](https://github.com/git-ai-project/git-ai), not here.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      placeholder: "How do I make the dashboard refresh after I add a new agent's hook without restarting the app?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you already tried
+      placeholder: "Read CONTRIBUTING.md, checked the Diagnostic page, restarted the app and it works — but I'd rather not restart every time."
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: git-ai-studio version
+      placeholder: "v0.1.0"

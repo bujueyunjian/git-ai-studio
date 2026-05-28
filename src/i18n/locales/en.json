@@ -1,0 +1,907 @@
+{
+  "common": {
+    "loading": "Loading…",
+    "noUploadNotice": "This tool parses everything on your machine. No code, conversations, or diagnostics are uploaded.",
+    "mustRestartAgent": "You must restart your AI agent (Claude Code / Cursor / Codex, etc.); otherwise the hook will not take effect and Diagnostic will still flag errors.",
+    "mustReopenTerminal": "After installing on Windows, close and reopen every terminal (PowerShell / CMD / Windows Terminal / IDE built-in terminals) so the updated PATH takes effect.",
+    "winAdminHint": "Reopen git-ai-studio or the terminal as Administrator, then try again.",
+    "winCrlfHint": "This repository has no `* text=auto eol=lf` declaration. On Windows, CRLF can shift line authorship by 1 line; consider adding that line at the repository root.",
+    "winPathSafeHint": "Avoid spaces and non-ASCII characters in the install path. If GIT_AI_HOME currently points to a directory with spaces or Chinese characters, switch it to a short pure-ASCII path (e.g. C:\\git-ai) and reinstall.",
+    "ccSwitchWarning": "When using cc-switch to switch models, make sure the hook in settings is still there — cc-switch may overwrite the hooks block in ~/.claude/settings.json, so confirm on the Hooks page after every switch."
+  },
+  "install": {
+    "sideEffects": [
+      "Downloads the install script to ~/.git-ai-studio/installers/",
+      "The install script writes the git-ai binary to ~/.git-ai/bin/",
+      "The install script registers the git proxy shim at the top of PATH",
+      "If an AI agent is installed, writes its corresponding config (~/.claude/settings.json, etc.)"
+    ],
+    "uninstallRemoved": [
+      "Removes the ~/.git-ai/ directory (binary, config.json, cached working_logs)",
+      "Runs git-ai remove-hooks to clean up registered AI agent hooks",
+      "Removes the git proxy shim (~/.git-ai/bin/git[.exe])"
+    ],
+    "uninstallKept": [
+      "AI authorship notes under refs/notes/ai in each repository are kept and remain readable after reinstall",
+      "Historical .git/ai/working_logs/ entries in each repository are kept",
+      "AI agent config files themselves are not removed"
+    ]
+  },
+  "hooks": {
+    "mode": {
+      "official": "Official hooks (git-ai install): cross-platform, automatically registered for Claude/Cursor. Recommended.",
+      "none": "Not configured: AI agent edits will not be tagged and will all fall into unknown_additions. Metrics will be skewed."
+    },
+    "switchSideEffects": {
+      "toOfficial": [
+        "Runs git-ai install, writing type=command hooks into ~/.claude/settings.json and similar files",
+        "Existing non-git-ai entries (cc-switch / user-defined hooks) are left untouched"
+      ],
+      "toNone": [
+        "Removes every git-ai-owned hook entry from ~/.claude/settings.json",
+        "Keeps cc-switch and user-registered hooks untouched",
+        "All AI-authored lines from then on will be counted as unknown_additions; metrics will be skewed"
+      ]
+    }
+  },
+  "daemon": {
+    "staleLock": {
+      "title": "Stale git-ai daemon lock",
+      "hint": "The previous daemon process exited abnormally without releasing daemon.lock. Every git-ai client command (including hook-triggered checkpoints) is now permanently blocked with \"daemon startup blocked: lock held at ...\".",
+      "stepLabel": "Action: delete the two files below and retry the hook — the next git-ai command will spin up a fresh daemon automatically.",
+      "copyCmdLabel": "Copy cleanup command"
+    },
+    "blockedLock": {
+      "title": "git-ai daemon lock is still held",
+      "hint": "daemon.lock is still held by git-ai.exe, but daemon.pid.json is missing or unusable. Deleting the lock directly will fail and every git-ai client command will keep reporting \"daemon startup blocked: lock held at ...\".",
+      "stepLabel": "Action: kill the git-ai.exe holding the lock first, then delete daemon.lock / daemon.pid.json, then retry your git-ai command.",
+      "copyCmdLabel": "Copy diagnostic commands"
+    }
+  },
+  "stats": {
+    "degraded": {
+      "repoMissing": {
+        "title": "Pick a repository first",
+        "description": "Stats needs a specific git repository to compute per-commit AI authorship. Choose one or scan to add on the Repositories page.",
+        "cta": "Go to Repositories"
+      },
+      "gitAiMissing": {
+        "title": "git-ai not detected",
+        "description": "The git-ai binary is missing, so stats cannot be generated. Come back here after installing.",
+        "cta": "Go to Install"
+      },
+      "noHead": {
+        "title": "Repository has no commits yet",
+        "description": "The repository's HEAD is unreadable (empty repo / freshly initialized). Come back after the first commit lands."
+      }
+    },
+    "noteText": {
+      "merge": "This commit is a merge commit. Merge authorship logs are allowed to be empty, so the AI line count is typically 0.",
+      "emptyAdditions": "This commit added no lines (pure delete / rename / merge). All buckets are 0 and shares display as —.",
+      "workingLogsMissing": "This commit added lines, but all of them fall into \"unknown\", and history shows no AI lines either — meaning the AI agent did not trigger git-ai's checkpoint hook. Confirm on the Hooks page."
+    },
+    "cacheHint": {
+      "refreshedPrefix": "Data updated",
+      "refreshNow": "Refresh now",
+      "refreshing": "Refreshing…",
+      "cachePolicy": "Stats on this page are considered stale after 30s automatically; switching commits / repositories or clicking Refresh re-fetches. git-ai stats --json runs as a local subprocess and uploads nothing."
+    }
+  },
+  "formula": {
+    "definition": "What it is",
+    "formula": "How it's computed",
+    "example": "Example"
+  },
+  "dashboard": {
+    "metricTitles": {
+      "headAiRate": "HEAD AI Share",
+      "windowAiTotal": "AI Production (window)",
+      "hookCoverage": "Hook Coverage"
+    },
+    "metricSources": {
+      "headAiRate": "AI lines / total added lines (current HEAD)",
+      "windowAiTotal": "Sum of AI lines across every commit in the window",
+      "hookCoverage": "Share of commits that carry a git-ai authorship record"
+    },
+    "metricErrors": {
+      "headFailed": "Failed to read stats for current HEAD",
+      "headUnavailable": "Stats for current HEAD are unavailable",
+      "hookFailed": "Failed to read window-level stats",
+      "diagnoseCta": "Diagnostic",
+      "degraded": {
+        "repoMissing": "No repository selected",
+        "gitAiMissing": "git-ai not detected",
+        "noHead": "Repository has no HEAD"
+      }
+    },
+    "degraded": {
+      "repoMissing": {
+        "title": "Pick a repository first",
+        "description": "Dashboard needs a git repository to aggregate historical stats. Choose one on the Repositories page.",
+        "cta": "Go to Repositories"
+      },
+      "gitAiMissing": {
+        "title": "git-ai not detected",
+        "description": "Dashboard's historical aggregation depends on git-ai stats. Come back here after installing.",
+        "cta": "Go to Install"
+      }
+    },
+    "emptyWindow": {
+      "title": "No commits in the selected range",
+      "descriptionTemplate": "This repository has no commits within \"{{rangeLabel}}\". Try a wider window.",
+      "widenCta": "Switch to last 90 days"
+    },
+    "chartAllZero": "Every commit in the window added no lines (pure merge / pure delete / pure rename). There is no time-series data to visualize.",
+    "truncatedHint": "The repository commit count exceeded the {{cap}}-commit cap; older commits in this window may have been skipped. Use a shorter window, or wait for pagination support in P10.",
+    "failedHint": "{{n}} commits failed stats collection this run. They are excluded from \"production\" and the time series so the numbers aren't polluted by zero-bucket fallbacks.",
+    "cacheHint": {
+      "refreshNow": "Refresh now",
+      "refreshing": "Refreshing…",
+      "cachedTemplate": "{{hits}} / {{total}} served from local SQLite cache"
+    }
+  },
+  "blame": {
+    "degraded": {
+      "repoMissing": {
+        "title": "Pick a repository first",
+        "description": "Blame needs a git repository to look up per-line AI authorship.",
+        "cta": "Go to Repositories"
+      },
+      "gitAiMissing": {
+        "title": "git-ai not detected",
+        "description": "The Blame view depends on git-ai blame. Come back here after installing.",
+        "cta": "Go to Install"
+      },
+      "noHead": {
+        "title": "Repository has no commits yet",
+        "description": "HEAD is unreadable; come back after the first commit lands."
+      },
+      "commitNotFound": {
+        "title": "Commit not found",
+        "descriptionTemplate": "git cannot find {{sha}} — it may have been rewritten by rebase. Pick another commit or return to HEAD."
+      },
+      "fileNotInHead": {
+        "title": "This file does not exist in that commit",
+        "descriptionTemplate": "{{file}} is not present in this commit (it may be working-tree only or added later)."
+      },
+      "fileTooLarge": {
+        "title": "File too large",
+        "descriptionTemplate": "The file ({{sizeKb}} KB) exceeds the {{limitKb}} KB limit. Blame skips rendering to avoid IPC stalls."
+      },
+      "fileBinary": {
+        "title": "Binary file",
+        "description": "The first 8000 bytes contain a NUL; treated as binary and not rendered."
+      },
+      "noAiAuthorship": {
+        "title": "No AI-authored lines in this file",
+        "description": "git-ai blame found no AI lines here — it may be purely human-written, or the AI agent had no hook installed when it wrote the code."
+      }
+    },
+    "popover": {
+      "promptHeading": "Prompt",
+      "agentLabel": "Agent",
+      "humanLabel": "Human author",
+      "loginRequired": "Not logged in to git-ai; cannot resolve the human author",
+      "scopeWarningRepoWide": "(repository-wide totals, not just this file)",
+      "acceptedTemplate": "{{n}} lines accepted",
+      "overridenTemplate": "{{n}} lines overridden by humans",
+      "totalAdditionsTemplate": "{{n}} lines produced",
+      "totalDeletionsTemplate": "{{n}} lines deleted",
+      "otherFilesHeading": "Other files this prompt touched",
+      "otherFilesMoreTemplate": "…and {{n}} more files",
+      "commitsHeading": "Appears in commits",
+      "driftCaveat": "Line content comes from the latest commit; the prompt was generated by the AI back then and **may have been edited by humans afterwards**, so the two need not match.",
+      "mergeCaveat": "If a line's last-touched commit is a merge, its authorship log may be empty (spec v3.0.0 §2.2); the UI shows it as a non-AI gray line."
+    },
+    "lineLegend": {
+      "ai": "AI-authored line",
+      "nonAi": "Non-AI line (human-edited, missed by hooks, or note dropped)"
+    },
+    "lrange": {
+      "label": "Range (-L)",
+      "placeholder": "e.g. 15,25",
+      "invalid": "Invalid format. Expecting 'start,end' where start ≤ end and both > 0."
+    },
+    "fileSearchPlaceholder": "Search files…",
+    "fileListEmpty": "No files matched",
+    "fileListHintTemplate": "{{n}} files total; type a keyword to filter (fuzzy directory-prefix match).",
+    "refPicker": {
+      "label": "Ref:",
+      "currentHead": "HEAD",
+      "triggerTitle": "Filter the blame view by branch / commit sha",
+      "popoverTitle": "Pick a ref",
+      "resetToHead": "Back to HEAD",
+      "branchesHeading": "Local branches",
+      "noBranches": "No local branches",
+      "branchesLoading": "Loading branches…",
+      "branchesFailed": "Failed to load branches",
+      "shaInputHeading": "Or paste a commit sha / tag",
+      "shaInputPlaceholder": "e.g. abc1234 or v1.2.0",
+      "shaApply": "Apply",
+      "shaEmpty": "Enter a sha or tag",
+      "refNotFoundTitle": "Ref not found",
+      "refNotFoundTemplate": "git cannot find {{r}} (or it is not a commit object). Check the spelling or pick a branch from the dropdown.",
+      "activeChipTemplate": "Current: {{r}}",
+      "searchBranchesPlaceholder": "Search branch name…"
+    }
+  },
+  "timeRange": {
+    "pickerLabel": "Time range",
+    "presets": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "thisWeek": "This week",
+      "lastWeek": "Last week",
+      "thisMonth": "This month",
+      "lastMonth": "Last month",
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "last90Days": "Last 90 days"
+    },
+    "customLabel": "Custom",
+    "customStartLabel": "Start date",
+    "customEndLabel": "End date",
+    "customApply": "Apply",
+    "customInvalidRange": "Start date must be on or before end date",
+    "customTooWideTemplate": "Custom range cannot span more than {{max}} days"
+  },
+  "gitAiAccount": {
+    "title": "git-ai Account",
+    "hint": "git-ai upstream OAuth / API key login state. Local authorship does not depend on login; remote aggregation (team dashboards) does.",
+    "refresh": "Refresh login state",
+    "refreshing": "Loading…",
+    "stateLoggedIn": "Logged in",
+    "stateLoggedOut": "Not logged in",
+    "stateRefreshExpired": "Credentials expired",
+    "stateError": "Login state error",
+    "logoutButton": "Log out",
+    "logoutConfirmTitle": "Confirm git-ai logout",
+    "logoutConfirmDescription": "Logging out clears local git-ai credentials. Local authorship data (refs/notes/ai and .git/ai/working_logs/) is unaffected; only remote aggregation push will fail until the next git-ai login.",
+    "logoutConfirmCta": "Confirm logout",
+    "logoutCancel": "Cancel",
+    "logoutOkToast": "Logged out of git-ai.",
+    "logoutFailed": "Logout failed",
+    "degradedGitAiMissing": "git-ai is not installed. Install it on the Install page first.",
+    "cliLoginHint": "To log in, run git-ai login in the terminal (Studio does not embed the login flow yet)."
+  },
+  "showRaw": {
+    "trigger": "View raw git-ai show",
+    "dialogTitleTemplate": "git-ai show {{sha}}",
+    "dialogDescription": "The raw text from upstream git-ai show (JSON metadata + attestations). When asking for help, copying this is the safest thing to share.",
+    "empty": "This commit has no AI authorship data (no authorship data).",
+    "copyButton": "Copy raw",
+    "copiedToast": "Raw text copied to clipboard.",
+    "loadFailed": "Failed to load raw git-ai show",
+    "degradedRepoMissing": "No repository selected — pick one on the Repo page first.",
+    "degradedGitAiMissing": "git-ai is not installed — install it on the Install page first."
+  },
+  "effectiveIgnore": {
+    "title": "Active ignore patterns",
+    "hint": "File path patterns git-ai actually skips when computing stats / blame. Sources: built-in defaults + the repository's .gitattributes (linguist-generated) + .git-ai-ignore at the repository root.",
+    "refresh": "Re-read",
+    "refreshing": "Loading…",
+    "listEmpty": "No patterns are active (rare; usually means an abnormal git-ai version or that the repository has no .git-ai-ignore and the defaults are disabled).",
+    "degradedRepoMissing": "No repository selected — pick one on the Repo page first, then come back.",
+    "degradedGitAiMissing": "git-ai is not installed — install it on the Install page first."
+  },
+  "chart": {
+    "human": "Human",
+    "unknown": "Unknown",
+    "ai": "AI"
+  },
+  "notes": {
+    "degraded": {
+      "repoMissing": {
+        "title": "Pick a repository first",
+        "description": "The Notes page needs a git repository to list refs/notes/ai.",
+        "cta": "Go to Repositories"
+      },
+      "noNotesInRepo": {
+        "title": "This repository has no AI authorship yet",
+        "description": "git notes --ref=ai is empty. There may be no commits with a checkpoint yet, or hooks are disabled. Confirm on the Hooks page.",
+        "cta": "Go to Hooks"
+      }
+    },
+    "commitNoNote": {
+      "title": "No AI authorship for this commit",
+      "description": "git notes --ref=ai show <sha> failed. Either the commit never had a checkpoint, or the note was removed by git-ai rewrite-authorship.",
+      "viewStats": "View Stats"
+    },
+    "header": {
+      "schemaVersionLabel": "schema",
+      "gitAiVersionLabel": "git-ai",
+      "baseCommitShaLabel": "base",
+      "committedAtLabel": "Committed at",
+      "summaryTemplate": "{{files}} files · {{prompts}} prompts · {{humans}} humans · {{sessions}} sessions",
+      "viewStats": "View Stats",
+      "copyFullJson": "Copy full JSON",
+      "copied": "Copied"
+    },
+    "sectionTitles": {
+      "attestations": "Authorship map",
+      "prompts": "Prompts (AI sessions)",
+      "humans": "Humans (human authors)",
+      "sessions": "Sessions (lightweight session)"
+    },
+    "chips": {
+      "promptLabel": "AI",
+      "humanLabel": "Human",
+      "sessionLabel": "Session"
+    },
+    "messages": {
+      "collapsedHint": "Conversation content is rendered locally and never uploaded",
+      "typeUser": "user",
+      "typeAssistant": "assistant",
+      "typeToolUse": "tool use",
+      "noMessages": "This prompt has no messages recorded"
+    },
+    "actions": {
+      "copyHash": "Copy hash",
+      "copyPromptJson": "Copy prompt JSON",
+      "copyMessagesUrl": "Copy link",
+      "openBlameAtHead": "Open in Blame",
+      "blameDisabledNonHead": "Blame currently only shows HEAD commits (P6 limitation); this link is enabled once you switch to notes for the HEAD commit.",
+      "blameDisabledDriftCaveat": "Blame line numbers are based on HEAD and may drift from historical commit line numbers."
+    },
+    "searchPlaceholder": "Search sha / subject…",
+    "listEmpty": "No commits matched",
+    "instructions": {
+      "title": "Select a commit on the left to view its AI authorship",
+      "description": "The list only shows commits that already have git notes --ref=ai. Selecting one expands attestations, prompts, humans, and sessions on the right."
+    },
+    "parseFailed": {
+      "title": "Failed to parse notes",
+      "description": "git notes show returned an unexpected format. Either git-ai schema drifted or the note content is corrupt. Expand below to see the raw error.",
+      "rawLabel": "Raw error"
+    }
+  },
+  "lowAiShare": {
+    "settingsTitle": "Low AI share reminder",
+    "settingsHint": "When enabled, a reminder pops up if your AI share in the last 7 days drops below the threshold. By default it filters by the current repository's git user.email; if no email is available it falls back to the whole repo. Self-checks every 15 minutes; does not bother you when total added lines < 50 in a fresh repo. Disabled by default.",
+    "rulesTitle": "Trigger rules",
+    "rules": [
+      "The window is fixed at the last 7 days; the formula is AI additions / (human + unknown + AI additions).",
+      "When target emails is empty, defaults to `git config user.email` of the current repository and counts only that author; if unreadable, falls back to the whole repo.",
+      "Triggers only when total additions in the window are ≥ 50 lines AND the AI share is strictly below the threshold.",
+      "Suppressed for 5 minutes after a repository switch; afterwards it re-checks and re-reminds at the configured remind interval.",
+      "After the user clicks X or the snooze button, reminders pause for the configured snooze duration.",
+      "OS notifications fire in parallel with the in-app toast (macOS Notification Center / Linux libnotify / Windows toast); if a cooldown above gates the toast, the OS notification is suppressed too."
+    ],
+    "thresholdLabel": "Threshold (trigger below)",
+    "targetEmailsLabel": "Target emails",
+    "targetEmailsPlaceholder": "Empty = current repo's git user.email\nalice@example.com\nbob@example.com",
+    "targetEmailsHelp": "Separate multiple emails with commas or newlines. For multi-author repos, name yourself or the lead; when empty, the current repository's git user.email is read automatically.",
+    "remindIntervalLabel": "Remind interval",
+    "dismissMinutesLabel": "Snooze after X",
+    "toastTitleWithRepoTemplate": "AI share in the last 7 days is {{pct}}% (below {{threshold}}% threshold) · {{repoName}}",
+    "toastTitleTemplate": "AI share in the last 7 days is {{pct}}% (below {{threshold}}% threshold)",
+    "toastDescription": "You can disable this reminder permanently in Settings.",
+    "toastActionView": "Open Dashboard",
+    "toastActionDismissTemplate": "Snooze for {{duration}}",
+    "dismissedToastTemplate": "Dismissed. No reminders for {{duration}}. You can disable this permanently in Settings."
+  },
+  "checkpoints": {
+    "degraded": {
+      "repoMissing": {
+        "title": "Pick a repository first",
+        "description": "Checkpoints needs a git repository to read working_logs.",
+        "cta": "Go to Repositories"
+      },
+      "noHead": {
+        "title": "Repository has no commits yet",
+        "description": "The checkpoint directory is keyed by HEAD sha; no base is available for an empty repo."
+      },
+      "gitAiMissing": {
+        "title": "git-ai not detected",
+        "description": "mock_checkpoint invokes the git-ai CLI; install it first. Reading the list itself does not require it, but the mock entry point will be disabled.",
+        "cta": "Go to Install"
+      },
+      "workingLogsDirMissing": {
+        "title": "No working_logs directory for this HEAD yet",
+        "description": ".git/ai/working_logs/<HEAD>/ does not exist, which usually means git-ai has not run a checkpoint at this HEAD yet. Confirm the AI agent's hook is registered on the Hooks page, or click \"Debug\" in the top right to generate test data via the mock entry.",
+        "cta": "Go to Hooks"
+      }
+    },
+    "header": {
+      "pageTitle": "Checkpoints",
+      "subtitle": "Working-directory view: AI / human edit checkpoints before the next commit (reads .git/ai/working_logs/<HEAD>/checkpoints.jsonl)",
+      "countTemplate": "{{n}} checkpoints",
+      "headShaLabel": "HEAD",
+      "preCommitNote": "Uncommitted: the next commit will write these authorship entries into git notes, viewable on the Notes page.",
+      "debugDropdown": "Debug"
+    },
+    "kind": {
+      "human": {
+        "label": "Human",
+        "tooltip": "Untracked human edit (legacy / no IDE extension reporting)"
+      },
+      "aiAgent": {
+        "label": "AI Agent",
+        "tooltip": "AI agent mode: bulk generation by Claude Code / Cursor Composer / Cline / etc."
+      },
+      "aiTab": {
+        "label": "AI Completion",
+        "tooltip": "AI inline completion: GitHub Copilot / Cursor Tab"
+      },
+      "knownHuman": {
+        "label": "Known Human",
+        "tooltip": "The IDE extension explicitly reported a human save event"
+      }
+    },
+    "card": {
+      "expand": "Expand details",
+      "collapse": "Collapse",
+      "diffLabelTemplate": "diff ({{lines}} lines)",
+      "agentMetadataLabel": "agent_metadata (may include IDE / session id, collapsed by default)",
+      "lineStatsTemplate": "+{{a}} / -{{d}} lines (SLOC +{{as}} / -{{ds}})",
+      "lineAttributionOverrodeTemplate": "Overrides {{prev}}",
+      "traceIdLabel": "trace_id",
+      "apiVersionLabel": "api",
+      "blameAtHeadButton": "Open HEAD in Blame",
+      "blameAtHeadCaveat": "Blame shows authorship for the HEAD commit, which may differ from this checkpoint's working-dir content at the time.",
+      "noEntries": "This checkpoint has no file entries",
+      "copyJson": "Copy this checkpoint JSON"
+    },
+    "emptyList": {
+      "title": "No checkpoints at current HEAD",
+      "description": "Hooks write to .git/ai/working_logs/<HEAD>/checkpoints.jsonl when an AI agent or human edits. If the file is missing or empty, the hook may not be configured (go to Hooks) or no edits have happened yet.",
+      "ctaHooks": "Go to Hooks"
+    },
+    "mockDialog": {
+      "titleTemplate": "mock_checkpoint ({{preset}})",
+      "intro": "This action really writes to .git/ai/working_logs/<HEAD>/checkpoints.jsonl, for debugging.",
+      "sideEffects": [
+        "Appends a Checkpoint (kind determined by preset) to .git/ai/working_logs/<HEAD_SHA>/checkpoints.jsonl",
+        "Affected files: the pathspecs you enter; if left empty, git-ai tags all currently dirty files",
+        "The checkpoint is counted by git-ai stats / status and will land in git notes --ref=ai on the next commit",
+        "Immediately visible in Stats / Dashboard / Blame / Notes (queries auto-invalidate, numbers change)",
+        "**Irreversible**: git-ai has no `checkpoint reset` CLI; delete .git/ai/working_logs/<HEAD_SHA>/checkpoints.jsonl or the whole sha directory by hand if needed"
+      ],
+      "pathspecsLabel": "pathspecs (one per line; empty = all dirty files)",
+      "pathspecsPlaceholder": "src/foo.ts\nsrc/bar/*.ts",
+      "pathspecsHelp": "Relative to repo root; supports git pathspec syntax. When empty, uses the actual dirty list from git status.",
+      "dirtyPreviewTitle": "Current dirty file preview (an empty pathspec will affect these files):",
+      "dirtyPreviewUnavailable": "Could not read the dirty file list (the git process may be unhealthy); on run it will match the actual git status result.",
+      "dirtyPreviewMoreTemplate": "…and {{n}} more files",
+      "dirtyPreviewTooManyWarnTemplate": "{{n}} dirty files detected; pass explicit pathspecs to avoid mis-tagging.",
+      "confirmInputLabel": "Type mock to confirm",
+      "confirmPlaceholder": "mock",
+      "start": "Run mock",
+      "cancel": "Cancel",
+      "starting": "Starting…",
+      "running": "Running…",
+      "logTitle": "mock_checkpoint run log (git-ai CLI output)",
+      "fireAndForgetHint": "The git-ai CLI is fire-and-forget: after the process exits, the daemon keeps writing asynchronously in the background. The list auto-refreshes about 800ms after this dialog closes; come back to this page later to see the new checkpoint.",
+      "doneOk": "exit 0 — git-ai CLI has sent the checkpoint request",
+      "irreversibleWarn": "This action is irreversible; git-ai-studio has no undo entry."
+    },
+    "mockBusy": "A mock task is already running",
+    "installBusy": "An install / uninstall task is in progress; mock is disabled",
+    "hooksBusy": "Hook switching is in progress; mock is disabled"
+  },
+  "workingDir": {
+    "label": "Uncommitted",
+    "tooltipTemplate": "Uncommitted working tree: human {{h}} · unknown {{u}} · ai {{a}}\nClick for details"
+  },
+  "quickFixCatalog": {
+    "sectionTitle": "Detected issues",
+    "sectionHint": "Matched live against your local diagnostic result. Click an entry to view the fix commands you can copy to the terminal, or jump to the corresponding page.",
+    "empty": "No issues detected — everything looks normal.",
+    "severityErr": "Critical",
+    "severityWarn": "Warning",
+    "severityInfo": "Info",
+    "dialogIntro": "Suggested fix steps below. Commands are ready to copy and run; if you already know what to do, click \"Go to fix\" to jump to the right page."
+  },
+  "people": {
+    "page": {
+      "title": "By Person",
+      "subtitle": "Aggregates AI authorship in the current repo window by author_email; numbers are parsed locally and uploaded nowhere.",
+      "searchPlaceholder": "Search name / email…",
+      "exportCsv": "Export CSV",
+      "refresh": "Refresh now",
+      "refreshing": "Refreshing…",
+      "identityHint": "Identity key = lower-cased author_email; emails differing only in case are merged into the same row. git mailmap is not used.",
+      "cachedTemplate": "{{hits}} / {{total}} served from local SQLite cache"
+    },
+    "degraded": {
+      "repoMissing": {
+        "title": "Pick a repository first",
+        "description": "By-person stats need a git repository to aggregate commits by author. Choose one on the Repositories page.",
+        "cta": "Go to Repositories"
+      },
+      "gitAiMissing": {
+        "title": "git-ai not detected",
+        "description": "By-person stats depend on git-ai stats. Come back here after installing.",
+        "cta": "Go to Install"
+      }
+    },
+    "emptyWindow": {
+      "title": "No commits in the selected range",
+      "description": "There are no commits in this window, so nothing to aggregate by person."
+    },
+    "emptySearch": {
+      "title": "No authors matched",
+      "description": "Try clearing the search box or using a different keyword."
+    },
+    "failedHintTemplate": "{{n}} commits failed stats collection this run. They are counted in \"commits\" but excluded from AI/human/unknown totals so the numbers aren't polluted by zero-bucket fallbacks.",
+    "truncatedHintTemplate": "The repository commit count exceeded the {{cap}}-commit cap; older commits in this window may have been skipped. Use a shorter window before aggregating.",
+    "metricTitles": {
+      "totalCommits": "Total commits",
+      "totalHuman": "Human additions (total)",
+      "totalAi": "AI lines (total)",
+      "overallAiRate": "Overall AI share"
+    },
+    "tableHeaders": {
+      "authorName": "Name",
+      "authorEmail": "Email",
+      "commits": "commits",
+      "humanAdditions": "Human additions",
+      "unknownAdditions": "Unknown",
+      "aiAdditions": "AI lines",
+      "totalAdditions": "Total additions",
+      "aiShare": "AI share"
+    },
+    "rowCommits": {
+      "heading": "Commit list (click to jump to Stats)",
+      "empty": "No commits",
+      "mergeChip": "merge",
+      "failedChip": "collect failed",
+      "aiTemplate": "AI +{{n}}",
+      "humanTemplate": "Human +{{n}}"
+    }
+  },
+  "changedFiles": {
+    "title": "Files changed in this commit",
+    "empty": "This commit has no changed files (it may be an empty commit).",
+    "loading": "Parsing changed files…",
+    "failedPrefix": "Failed to load changed files",
+    "invalidSha": "That sha does not exist in the local repository or is not a valid commit.",
+    "status": {
+      "A": "Added",
+      "M": "Modified",
+      "D": "Deleted",
+      "R": "Renamed",
+      "C": "Copied",
+      "T": "Type change",
+      "U": "Conflict",
+      "X": "Unknown",
+      "B": "Split"
+    },
+    "aiLineChipTemplate": "{{n}} AI lines",
+    "jumpBlameTitle": "Open in Blame (locked to this commit)"
+  },
+  "authorsJumpBlame": {
+    "noAiLinesDisabled": "This author has no AI-authored lines in any commit within the window; cannot jump",
+    "jumpTitle": "Open AI lines from this author's latest commit in Blame"
+  },
+  "diagnostic": {
+    "check": {
+      "gitAiBinaryLabel": "git-ai binary present",
+      "gitAiBinaryImpact": "No AI authorship metric can be produced (without the tagger, there's no stats / blame / notes)",
+      "gitAiBinaryFix": "Go to Install",
+      "gitAiVersionLabel": "git-ai version",
+      "gitAiVersionImpactWarn": "This version is marked as having known issues. Local stats are unaffected, but remote aggregation (team dashboard) stats may be skewed.",
+      "gitAiVersionFix": "Switch version",
+      "gitShimLabel": "git proxy shim is active",
+      "gitShimErrDetail": "Neither where nor which found a git binary",
+      "gitShimErrImpact": "git itself is missing; git-ai's proxy chain cannot start",
+      "gitShimGoInstall": "Go to Install",
+      "gitShimFirstIsShimTemplate": "First line = {{expected}}",
+      "gitShimMismatchTemplate": "First candidate {{actual}} ≠ {{expected}}",
+      "gitShimMismatchImpact": "When PATH order is wrong, git resolves to the system binary instead of git-ai's proxy; commits do not trigger authorship and all stats are 0",
+      "gitShimReinstall": "Reinstall",
+      "loginLabel": "git-ai login state",
+      "loginImpactNotLoggedIn": "Local authorship still works, but pushes to remote aggregation (team dashboard) may fail",
+      "loginFix": "See login guide",
+      "inRepoLabel": "Inside a git repository",
+      "inRepoImpactMissing": "When no repo is selected or the directory has no .git, no metric is computable",
+      "inRepoFix": "Pick a repository",
+      "coreHooksPathLabel": "Repository core.hooksPath uncontaminated",
+      "coreHooksPathImpactWarn": "A custom hooksPath may disable git-ai's proxy hooks. If you've confirmed git-ai's post-commit / prepare-commit-msg are inside that path, you can ignore this.",
+      "coreHooksPathFixWarn": "Open Hooks",
+      "anyAgentConfiguredLabel": "At least one configured AI agent detected",
+      "anyAgentConfiguredDetailTemplate": "{{configured}} configured / {{total}} agents",
+      "anyAgentConfiguredImpactErr": "No agent has a checkpoint entry; every edit will be counted as unknown_additions",
+      "anyAgentConfiguredFix": "Configure Hooks",
+      "workingLogsLabel": "Current HEAD has checkpoint records",
+      "workingLogsDetailTemplate": "{{n}} .jsonl files",
+      "workingLogsDetailNoRepo": "No repository selected",
+      "workingLogsImpactEmpty": "There are no checkpoints under the current HEAD yet. They appear after AI writes and saves code; authorship lands in git notes after commit.",
+      "envLabel": "Critical GIT_AI_* env vars are not abnormally overridden",
+      "envDetectedTemplate": "Detected {{var}} explicitly set",
+      "envNormal": "Not set (normal)",
+      "envImpactWarn": "Environment variables can cause the client to use a different binary than the one installed, leading to parse and statistics inconsistencies",
+      "agentDetectedFalseTemplate": "{{agent}} config present",
+      "agentDetectedFalseDetail": "Agent not detected",
+      "agentConfiguredTrueTemplate": "{{agent}} has git-ai checkpoint hook registered",
+      "agentConfiguredDetail": "Configured",
+      "agentConfiguredImpactErrTemplate": "Code edited by {{agent}} will not trigger a checkpoint; all AI lines produced by it will be marked unknown",
+      "agentConfiguredFixErr": "Fix hooks"
+    },
+    "overviewChips": {
+      "gitAi": "git-ai",
+      "gitShim": "Git Shim",
+      "login": "Login",
+      "hooks": "Hooks",
+      "repo": "Repo"
+    }
+  },
+  "logs": {
+    "page": {
+      "title": "Logs",
+      "intro": "Every log on this page is read and rendered on your machine. It may contain local paths, API key fragments, or git-ai subprocess error text — redact before copying or sharing."
+    },
+    "tabs": {
+      "debug": "git-ai diagnostics",
+      "app": "Application log"
+    },
+    "debug": {
+      "intro": "Runs git-ai debug once and streams stdout/stderr live. Diagnostics is the structured view; this tab gives the raw stream (handy for copying to a teammate or filing an issue).",
+      "runButton": "Run git-ai debug",
+      "rerunButton": "Run again",
+      "running": "Running…",
+      "copyAll": "Copy all",
+      "copyDone": "Copied",
+      "emptyIdle": "Click the button to start; output streams below.",
+      "noGitAi": {
+        "title": "git-ai not installed",
+        "detail": "Install git-ai on the Install page first.",
+        "cta": "Go to Install"
+      },
+      "exitTemplate": "Subprocess exited (exit {{code}}, took {{seconds}}s)",
+      "failed": "Run failed; see the output above."
+    },
+    "viewer": {
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
+      "autoRefresh": "Auto refresh (5s)",
+      "openInExplorer": "Open in file manager",
+      "sizeKbTemplate": "{{kb}} KB",
+      "truncatedBadgeTemplate": "Truncated, showing the last {{kb}} KB",
+      "mtimeUnknown": "Time unknown",
+      "loadFailed": "Failed to read log"
+    },
+    "app": {
+      "title": "Application log",
+      "hint": "The default tauri-plugin-log target. A single file caps at 40KB and is overwritten once exceeded (KeepOne rotation).",
+      "empty": {
+        "title": "No application log yet",
+        "detail": "The app just started or has not emitted any log yet. Run a few actions and come back."
+      }
+    }
+  },
+  "manual": {
+    "page": {
+      "title": "User manual",
+      "subtitle": "Common git-ai commands, metric definitions, and troubleshooting. Everything is parsed locally; nothing is uploaded."
+    },
+    "tabs": {
+      "commands": "git-ai commands",
+      "metrics": "Metric definitions",
+      "troubleshooting": "Troubleshooting"
+    },
+    "commands": {
+      "hint": "The commands below follow the official git-ai README and the calls this tool actually makes. Most actions are wrapped as buttons; this list is for cross-checking or troubleshooting in a terminal.",
+      "items": [
+        {
+          "cmd": "git-ai install",
+          "desc": "Install / repair git-ai and write the checkpoint hook for supported AI agents (idempotent; agents already configured correctly are left untouched).",
+          "example": "git-ai install"
+        },
+        {
+          "cmd": "git-ai install-hooks",
+          "desc": "Only (re)write each agent's managed hook file, e.g. Claude's settings.json or the OpenCode plugin.",
+          "example": "git-ai install-hooks"
+        },
+        {
+          "cmd": "git-ai stats",
+          "desc": "Print AI authorship stats for the current repository; add --json for a machine-readable structure; a commit range can be specified.",
+          "example": "git-ai stats --json\ngit ai stats <start_sha>..<end_sha> --json"
+        },
+        {
+          "cmd": "git-ai blame <path>",
+          "desc": "An AI-authorship-aware version of git blame, annotating each line with the agent / prompt that generated it. Supports all standard git blame flags.",
+          "example": "git-ai blame src/log_fmt/authorship_log.rs"
+        },
+        {
+          "cmd": "git-ai checkpoint <agent> --hook-input stdin",
+          "desc": "Called automatically by each agent's edit hook to link every AI edit to a model / agent / prompt. Rarely run by hand; check whether it errors when troubleshooting.",
+          "example": "echo \"{}\" | git-ai checkpoint claude --hook-input stdin"
+        },
+        {
+          "cmd": "/ask skill",
+          "desc": "A skill git-ai installs into ~/.agents/skills/: ask the agent that wrote the code about its instructions, decisions, and task intent. Use /ask directly inside your agent.",
+          "example": "(inside your AI agent conversation) /ask"
+        }
+      ]
+    },
+    "metrics": {
+      "hint": "Metric definitions share the same source as this tool's Stats / People pages (formulas.ts). total = human + unknown + AI, three buckets side by side.",
+      "kindRaw": "Raw",
+      "kindDerived": "Derived",
+      "examplePrefix": "Example: "
+    },
+    "copy": {
+      "label": "Copy",
+      "done": "Copied",
+      "aria": "Copy command"
+    },
+    "troubleshooting": {
+      "items": [
+        {
+          "q": "hook reports \"daemon startup blocked: lock held at ...daemon.lock\"",
+          "a": [
+            {
+              "kind": "text",
+              "text": "The last git-ai daemon exited abnormally without releasing its file lock, so every hook command stays blocked. A stale-lock banner appears at the top of the Diagnostics page; follow it to delete daemon.lock and daemon.pid.json, then retry — the next git-ai command spins up a fresh daemon."
+            }
+          ]
+        },
+        {
+          "q": "Metrics are all \"Unattributed\" / stats drop to zero",
+          "a": [
+            {
+              "kind": "text",
+              "text": "This means the AI agent's edits did not trigger the git-ai checkpoint hook. Open Diagnostics to see each agent's hook status and click \"Fix this\" for any that are missing; afterwards you must restart the agent and reopen the terminal."
+            }
+          ]
+        },
+        {
+          "q": "Local blame shows AI annotations, but the remote team dashboard counts nothing",
+          "a": [
+            {
+              "kind": "text",
+              "text": "AI authorship lives in refs/notes/ai. git-ai's post-push hook normally syncs that ref to the remote after git push. If the team dashboard still sees nothing, sync the notes manually with these three steps:"
+            },
+            {
+              "kind": "cmd",
+              "cmd": "git fetch origin refs/notes/ai:refs/notes/ai_remote",
+              "caption": "First fetch the remote AI notes into a temporary tracking ref."
+            },
+            {
+              "kind": "cmd",
+              "cmd": "git notes --ref ai merge refs/notes/ai_remote",
+              "caption": "Merge the remote AI notes into the local refs/notes/ai."
+            },
+            {
+              "kind": "cmd",
+              "cmd": "git push origin refs/notes/ai",
+              "caption": "Push the merged AI notes back to the remote."
+            },
+            {
+              "kind": "text",
+              "text": "This syncs AI metadata (Git Notes), not code. Do not set git config --global remote.origin.push=refs/notes/* yourself — the wildcard also pushes git-ai's tracking ref refs/notes/ai-remote/*, affecting other repos and notes-based tools, contrary to git-ai practice."
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "nav": {
+    "appName": "Git AI Studio",
+    "appTagline": "Local AI code authorship",
+    "dashboard": "Dashboard",
+    "commits": "Commits",
+    "people": "People",
+    "blame": "Blame",
+    "notes": "git notes",
+    "checkpoints": "Checkpoints",
+    "diagnostic": "Diagnostics",
+    "install": "Install & update",
+    "hooks": "Hooks",
+    "logs": "Logs",
+    "manual": "User manual",
+    "footer": "v0.1.0 · Parsed locally, nothing uploaded"
+  },
+  "rail": {
+    "group": {
+      "analysis": "Analysis",
+      "config": "Setup",
+      "help": "Help"
+    }
+  },
+  "topBar": {
+    "noRepo": "No repository",
+    "noRepoSelected": "No repository selected",
+    "recentRepos": "Recent",
+    "noRecentRepos": "No recent repositories",
+    "searchRepoPlaceholder": "Search repo name / path…",
+    "manageRepos": "Manage repositories…",
+    "settingsTooltip": "Settings",
+    "shaCopied": "HEAD SHA copied",
+    "repoSwitched": "Repository switched",
+    "repoSwitchFailed": "Switch failed",
+    "copyShaAria": "Copy HEAD SHA",
+    "copyShaTitle": "Copy full HEAD SHA",
+    "branch": {
+      "triggerTitle": "Switch branch (a dirty tree blocks checkout)",
+      "searchPlaceholder": "Search branch name...",
+      "noMatch": "No matching branch",
+      "heading": "Switch branch",
+      "loading": "Loading…",
+      "noLocalBranches": "No local branches",
+      "dirtyTitle": "Working tree has {{n}} uncommitted changes; cannot switch to {{name}}",
+      "dirtyDescription": "Stage or commit on the Checkpoints page first, then retry",
+      "moreFiles": "…and {{n}} more files",
+      "notFound": "Branch {{name}} does not exist",
+      "switchFailed": "Switch failed",
+      "switched": "Switched to branch {{branch}}",
+      "switchToFailed": "Failed to switch to {{name}}"
+    }
+  },
+  "onboarding": {
+    "title": "Finish setup in three steps to see which lines your AI wrote",
+    "description": "Git AI Studio relies on the external git-ai CLI: install git-ai, pick a local repository, and configure hooks for your AI agent before the Dashboard shows data.",
+    "checklist": {
+      "gitAi": "Install the git-ai CLI",
+      "repo": "Select a local repository",
+      "hook": "Configure a hook for an AI agent"
+    },
+    "cta": "Finish setup",
+    "skip": "Skip for now"
+  },
+  "deepLink": {
+    "viewCheckpoints": "View checkpoints",
+    "viewCheckpointsHint": "Raw working_logs checkpoints for this HEAD"
+  },
+  "settings": {
+    "language": {
+      "label": "UI language",
+      "hint": "Takes effect immediately; the choice is saved in local localStorage.",
+      "zh_CN": "简体中文",
+      "en": "English"
+    }
+  },
+  "repo": {
+    "title": "Repositories",
+    "subtitle": "Configure scan roots, then pick a repository as the target for diagnostics and stats.",
+    "current": "Current",
+    "toast": {
+      "saveRootsFailed": "Failed to save scan roots",
+      "switched": "Repository switched",
+      "switchFailed": "Failed to switch repository",
+      "openFolderFailed": "Failed to open folder",
+      "openPickerFailed": "Failed to open directory picker"
+    },
+    "scanRoots": {
+      "title": "Scan roots",
+      "rescan": "Rescan",
+      "emptyHint": "No directories added yet. Add the top-level folder where you keep your code, e.g.",
+      "remove": "Remove",
+      "pickDir": "Pick directory",
+      "pickDialogTitle": "Pick a scan root",
+      "noDirPicked": "No directory picked",
+      "add": "Add",
+      "pasteAdvanced": "Paste a path directly (advanced)",
+      "pastePlaceholder": "e.g. D:\\script"
+    },
+    "recent": {
+      "title": "Recently opened",
+      "open": "Open →"
+    },
+    "all": {
+      "title": "All repositories",
+      "filterPlaceholder": "Filter by name or path",
+      "empty": "No matching repositories. Check your scan roots or filter term."
+    },
+    "row": {
+      "dirty": "Uncommitted",
+      "checkpointCount": "{{n}} checkpoints",
+      "gitAiEmpty": ".git/ai empty",
+      "openInExplorer": "Open in file manager",
+      "selected": "Selected",
+      "switching": "Switching",
+      "select": "Select"
+    }
+  },
+  "update": {
+    "available": "Update available: v{{version}} — click to view and install",
+    "checkForUpdates": "Check for updates",
+    "downloadAndInstall": "Download and install v{{version}}",
+    "downloading": "Downloading…",
+    "downloadingPercent": "Downloading… {{percent}}%",
+    "upToDate": "You're on the latest version",
+    "checkFailed": "Failed to check for updates",
+    "installFailed": "Failed to download or install the update"
+  }
+}

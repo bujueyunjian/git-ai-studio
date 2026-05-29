@@ -18,6 +18,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Dialog } from "../components/ui/DialogShell";
@@ -35,13 +36,6 @@ import {
   listRecentCommits,
 } from "../lib/api";
 import { buildBlameUrlParams } from "../lib/blameUrl";
-import {
-  CHANGED_FILES_SECTION,
-  SHOW_RAW,
-  STATS_CACHE_HINT,
-  STATS_DEGRADED,
-  STATS_NOTE_TEXT,
-} from "../lib/copy";
 import {
   deriveRates,
   formatInt,
@@ -62,9 +56,12 @@ import type {
 import { useRouter } from "../router";
 
 const COMMIT_LIST_LIMIT = 30;
-const STALE_TIME_MS = STATS_CACHE_HINT.stale_time_seconds * 1000;
+/** stats 缓存过期时间(秒),对齐后端 SQLite 缓存策略。 */
+const STATS_STALE_TIME_SECONDS = 30;
+const STALE_TIME_MS = STATS_STALE_TIME_SECONDS * 1000;
 
 export default function StatsPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
   const [shaInput, setShaInput] = useState("");
@@ -106,15 +103,22 @@ export default function StatsPage() {
   // ===== degraded 空态 =====
   if (statsQ.data?.status === "degraded") {
     const kind = statsQ.data.reason.kind;
-    const copy = STATS_DEGRADED[kind];
+    // kind → i18n key 前缀:repo_missing / git_ai_missing / no_head
+    const keyPrefix =
+      kind === "repo_missing"
+        ? "stats.degraded.repoMissing"
+        : kind === "git_ai_missing"
+          ? "stats.degraded.gitAiMissing"
+          : "stats.degraded.noHead";
+    const ctaKey = kind !== "no_head" ? `${keyPrefix}.cta` : undefined;
     return (
       <EmptyState
         Icon={kind === "repo_missing" ? FolderOpen : Activity}
-        title={copy.title}
-        description={copy.description}
-        ctaLabel={copy.cta}
+        title={t(`${keyPrefix}.title`)}
+        description={t(`${keyPrefix}.description`)}
+        ctaLabel={ctaKey ? t(ctaKey as never) : undefined}
         onCta={
-          copy.cta ? () => router.navigate(kind === "repo_missing" ? "repo" : "install") : undefined
+          ctaKey ? () => router.navigate(kind === "repo_missing" ? "repo" : "install") : undefined
         }
       />
     );
@@ -213,6 +217,7 @@ function Header({
   onViewNotes: (sha: string) => void;
   onViewShow: (sha: string) => void;
 }) {
+  const { t } = useTranslation();
   const isWorking = view.kind === "working";
   // HEAD 短 sha,仅在非 working 视图时显示;working 时下拉的 HEAD 选项保持中性"HEAD"标签
   const headLabel = !isWorking && view.commit_sha ? view.commit_sha.slice(0, 7) : "HEAD";
@@ -295,7 +300,7 @@ function Header({
               title="git-ai show <sha> 原文"
             >
               <FileText className="h-3 w-3" />
-              {SHOW_RAW.trigger}
+              {t("showRaw.trigger")}
             </button>
           </>
         )}
@@ -317,14 +322,13 @@ function CacheBar({
   isFetching: boolean;
   onRefresh: () => void;
 }) {
+  const { t } = useTranslation();
   const rel = fetchedAt ? formatRelativeFromNow(fetchedAt, now) : "—";
   return (
     <div className="flex items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500 dark:border-border dark:bg-card/40">
       <div>
-        {STATS_CACHE_HINT.refreshed_prefix} <span className="font-mono">{rel}</span>
-        <span className="ml-2 text-slate-400">
-          · 缓存 {STATS_CACHE_HINT.stale_time_seconds}s · 数据不上传
-        </span>
+        {t("stats.cacheHint.refreshedPrefix")} <span className="font-mono">{rel}</span>
+        <span className="ml-2 text-slate-400">· 缓存 {STATS_STALE_TIME_SECONDS}s · 数据不上传</span>
       </div>
       <button
         type="button"
@@ -334,7 +338,7 @@ function CacheBar({
         aria-label="立即刷新 stats"
       >
         <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
-        {isFetching ? STATS_CACHE_HINT.refreshing : STATS_CACHE_HINT.refresh_now}
+        {isFetching ? t("stats.cacheHint.refreshing") : t("stats.cacheHint.refreshNow")}
       </button>
     </div>
   );
@@ -343,6 +347,7 @@ function CacheBar({
 // ============ Note 警示条(基于客观字段,无启发式阈值) ============
 
 function NoteBanners({ view }: { view: StatsView }) {
+  const { t } = useTranslation();
   const router = useRouter();
   type Banner = {
     tone: "amber" | "info";
@@ -353,16 +358,16 @@ function NoteBanners({ view }: { view: StatsView }) {
   const banners: Banner[] = [];
 
   if (view.note_kind === "merge") {
-    banners.push({ tone: "info", text: STATS_NOTE_TEXT.merge, key: "merge" });
+    banners.push({ tone: "info", text: t("stats.noteText.merge"), key: "merge" });
   }
   if (view.note_kind === "empty_additions") {
-    banners.push({ tone: "info", text: STATS_NOTE_TEXT.empty_additions, key: "empty" });
+    banners.push({ tone: "info", text: t("stats.noteText.emptyAdditions"), key: "empty" });
   }
   if (view.note_kind === "working_logs_missing") {
     // working_logs_missing 文案引导用户去 Hooks 页确认 —— 配套提供跳转按钮,避免"读到指令找不到入口"。
     banners.push({
       tone: "amber",
-      text: STATS_NOTE_TEXT.working_logs_missing,
+      text: t("stats.noteText.workingLogsMissing"),
       key: "wlm",
       cta: { label: "前往 Hooks", onClick: () => router.navigate("hooks") },
     });
@@ -402,6 +407,7 @@ function NoteBanners({ view }: { view: StatsView }) {
 // 默认折叠;展开后并发拉 changed-files 与 ai-lines,按 path 索引出每文件的 AI 行数。
 // 点击文件行 → 跳 Blame 锁定到该 sha(经 router query `?sha=<sha>` 传给 Blame 页)。
 function ChangedFilesSection({ sha }: { sha: string }) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -455,7 +461,7 @@ function ChangedFilesSection({ sha }: { sha: string }) {
         ) : (
           <ChevronRight className="h-4 w-4 text-muted-foreground" />
         )}
-        <span>{CHANGED_FILES_SECTION.title}</span>
+        <span>{t("changedFiles.title")}</span>
         {open && changedQ.data?.status === "ok" && (
           <span className="ml-2 rounded-sm bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {changedQ.data.files.length}
@@ -485,18 +491,19 @@ function ChangedFilesBody({
   aiLinesByFile: Map<string, number>;
   onJump: (file: string, line?: number) => void;
 }) {
+  const { t } = useTranslation();
   if (changedQ.isLoading) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        {CHANGED_FILES_SECTION.loading}
+        {t("changedFiles.loading")}
       </div>
     );
   }
   if (changedQ.isError) {
     return (
       <div className="text-xs text-red-600 dark:text-red-400">
-        {CHANGED_FILES_SECTION.failed_prefix}:{(changedQ.error as Error).message}
+        {t("changedFiles.failedPrefix")}:{(changedQ.error as Error).message}
       </div>
     );
   }
@@ -504,21 +511,26 @@ function ChangedFilesBody({
   if (!data) return null;
   if (data.status === "degraded") {
     if (data.reason.kind === "invalid_sha") {
-      return (
-        <div className="text-xs text-muted-foreground">{CHANGED_FILES_SECTION.invalid_sha}</div>
-      );
+      return <div className="text-xs text-muted-foreground">{t("changedFiles.invalidSha")}</div>;
     }
     // repo_missing:整页已经走 degraded 不会到这,保险给个提示
-    return <div className="text-xs text-muted-foreground">{STATS_DEGRADED.repo_missing.title}</div>;
+    return (
+      <div className="text-xs text-muted-foreground">{t("stats.degraded.repoMissing.title")}</div>
+    );
   }
   if (data.files.length === 0) {
-    return <div className="text-xs text-muted-foreground">{CHANGED_FILES_SECTION.empty}</div>;
+    return <div className="text-xs text-muted-foreground">{t("changedFiles.empty")}</div>;
   }
+  // status 字符 → 中文标签(changedFiles.status 是 returnObjects map)
+  const statusLabelMap = t("changedFiles.status", { returnObjects: true }) as Record<
+    string,
+    string
+  >;
   return (
     <ul className="space-y-1 text-xs">
       {data.files.map((f) => {
         const aiCount = aiLinesByFile.get(f.path) ?? 0;
-        const statusLabel = CHANGED_FILES_SECTION.status_label[f.status] ?? f.status;
+        const statusLabel = statusLabelMap[f.status] ?? f.status;
         // 删除的文件:对应路径在当前 ref 下不存在,Blame 跳过去会 file_not_in_head → 显示但禁用
         const disabled = f.status === "D";
         return (
@@ -527,9 +539,7 @@ function ChangedFilesBody({
               type="button"
               onClick={() => !disabled && onJump(f.path)}
               disabled={disabled}
-              title={
-                disabled ? "已删除文件,无法在 Blame 中查看" : CHANGED_FILES_SECTION.jump_blame_title
-              }
+              title={disabled ? "已删除文件,无法在 Blame 中查看" : t("changedFiles.jumpBlameTitle")}
               className="group flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent dark:hover:bg-slate-800/60"
             >
               <StatusBadge status={f.status} label={statusLabel} />
@@ -538,7 +548,7 @@ function ChangedFilesBody({
               </code>
               {aiCount > 0 && (
                 <span className="shrink-0 rounded-sm bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary ring-1 ring-inset ring-ring dark:bg-primary/10 dark:text-primary dark:ring-ring">
-                  {CHANGED_FILES_SECTION.ai_line_chip_template(aiCount)}
+                  {t("changedFiles.aiLineChipTemplate", { n: aiCount })}
                 </span>
               )}
             </button>
@@ -693,6 +703,7 @@ function splitShowRaw(raw: string): { json: string; attestations: string | null 
 }
 
 function ShowRawDialog({ sha, onClose }: { sha: string | null; onClose: () => void }) {
+  const { t } = useTranslation();
   const open = sha !== null;
   const showQ = useQuery<ShowRawResult>({
     queryKey: ["show_raw", sha],
@@ -708,18 +719,18 @@ function ShowRawDialog({ sha, onClose }: { sha: string | null; onClose: () => vo
     if (data?.status === "degraded") {
       toast.error(
         data.reason.kind === "repo_missing"
-          ? SHOW_RAW.degraded_repo_missing
-          : SHOW_RAW.degraded_git_ai_missing,
+          ? t("showRaw.degradedRepoMissing")
+          : t("showRaw.degradedGitAiMissing"),
       );
       onClose();
     }
-  }, [open, showQ.data, onClose]);
+  }, [open, showQ.data, onClose, t]);
 
   const copyM = useMutation({
     mutationFn: async (text: string) => {
       await navigator.clipboard.writeText(text);
     },
-    onSuccess: () => toast.success(SHOW_RAW.copied_toast),
+    onSuccess: () => toast.success(t("showRaw.copiedToast")),
     onError: (e) => toast.error("复制失败", { description: (e as Error).message }),
   });
 
@@ -732,8 +743,8 @@ function ShowRawDialog({ sha, onClose }: { sha: string | null; onClose: () => vo
     <Dialog
       open={open}
       onOpenChange={(v) => !v && onClose()}
-      title={sha ? SHOW_RAW.dialog_title(sha) : ""}
-      description={SHOW_RAW.dialog_description}
+      title={sha ? t("showRaw.dialogTitleTemplate", { sha: sha.slice(0, 7) }) : ""}
+      description={t("showRaw.dialogDescription")}
       size="xl"
       footer={
         <>
@@ -748,7 +759,7 @@ function ShowRawDialog({ sha, onClose }: { sha: string | null; onClose: () => vo
             ) : (
               <Copy className="h-3.5 w-3.5" />
             )}
-            {SHOW_RAW.copy_button}(全文)
+            {t("showRaw.copyButton")}(全文)
           </button>
           <button
             type="button"
@@ -768,10 +779,10 @@ function ShowRawDialog({ sha, onClose }: { sha: string | null; onClose: () => vo
       )}
       {showQ.isError && (
         <p className="text-xs text-rose-600 dark:text-rose-400">
-          {SHOW_RAW.load_failed}:{(showQ.error as Error).message}
+          {t("showRaw.loadFailed")}:{(showQ.error as Error).message}
         </p>
       )}
-      {payload && isEmpty && <p className="text-xs text-slate-500">{SHOW_RAW.empty}</p>}
+      {payload && isEmpty && <p className="text-xs text-slate-500">{t("showRaw.empty")}</p>}
       {payload && !isEmpty && sections && (
         <div className="space-y-3">
           <RawSection

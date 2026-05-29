@@ -19,17 +19,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, AlertTriangle, FileJson, FolderOpen, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { EmptyState } from "../components/EmptyState";
 import { NoteDetail } from "../components/NoteDetail";
 import { NotesList } from "../components/NotesList";
 import { listAiNotes, showAiNote } from "../lib/api";
-import {
-  NOTES_COMMIT_NO_NOTE,
-  NOTES_DEGRADED,
-  NOTES_INSTRUCTIONS,
-  NOTES_PARSE_FAILED,
-} from "../lib/copy";
 import type { NotesListResult, ShowNoteResult } from "../lib/types";
 import { useRouter } from "../router";
 
@@ -42,6 +37,7 @@ function sanitizeSha(s: string | undefined): string | null {
 }
 
 export default function NotesPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const selectedSha = sanitizeSha(router.params);
 
@@ -97,9 +93,9 @@ export default function NotesPage() {
       return (
         <EmptyState
           Icon={FolderOpen}
-          title={NOTES_DEGRADED.repo_missing.title}
-          description={NOTES_DEGRADED.repo_missing.description}
-          ctaLabel={NOTES_DEGRADED.repo_missing.cta}
+          title={t("notes.degraded.repoMissing.title")}
+          description={t("notes.degraded.repoMissing.description")}
+          ctaLabel={t("notes.degraded.repoMissing.cta")}
           onCta={() => router.navigate("repo")}
         />
       );
@@ -107,9 +103,9 @@ export default function NotesPage() {
     return (
       <EmptyState
         Icon={Activity}
-        title={NOTES_DEGRADED.no_notes_in_repo.title}
-        description={NOTES_DEGRADED.no_notes_in_repo.description}
-        ctaLabel={NOTES_DEGRADED.no_notes_in_repo.cta}
+        title={t("notes.degraded.noNotesInRepo.title")}
+        description={t("notes.degraded.noNotesInRepo.description")}
+        ctaLabel={t("notes.degraded.noNotesInRepo.cta")}
         onCta={() => router.navigate("hooks")}
         tone="amber"
       />
@@ -210,26 +206,28 @@ function UnreachableBanner({ shas }: { shas: string[] }) {
 }
 
 function Instructions() {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full items-center justify-center p-10">
       <div className="max-w-md rounded-lg border border-slate-200 bg-white p-8 text-center shadow-xs dark:border-border dark:bg-card">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800">
           <FileJson className="h-7 w-7" />
         </div>
-        <div className="mt-4 text-lg font-semibold">{NOTES_INSTRUCTIONS.title}</div>
-        <div className="mt-2 text-sm text-slate-500">{NOTES_INSTRUCTIONS.description}</div>
+        <div className="mt-4 text-lg font-semibold">{t("notes.instructions.title")}</div>
+        <div className="mt-2 text-sm text-slate-500">{t("notes.instructions.description")}</div>
       </div>
     </div>
   );
 }
 
 function CommitNoNote({ onViewStats }: { onViewStats: () => void }) {
+  const { t } = useTranslation();
   return (
     <EmptyState
       Icon={FileJson}
-      title={NOTES_COMMIT_NO_NOTE.title}
-      description={NOTES_COMMIT_NO_NOTE.description}
-      ctaLabel={NOTES_COMMIT_NO_NOTE.view_stats}
+      title={t("notes.commitNoNote.title")}
+      description={t("notes.commitNoNote.description")}
+      ctaLabel={t("notes.commitNoNote.viewStats")}
       onCta={onViewStats}
       tone="neutral"
     />
@@ -237,13 +235,16 @@ function CommitNoNote({ onViewStats }: { onViewStats: () => void }) {
 }
 
 function ParseFailed({ message }: { message: string }) {
+  const { t } = useTranslation();
   return (
     <div className="p-6">
       <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-        <div className="font-medium">{NOTES_PARSE_FAILED.title}</div>
-        <div className="mt-1 text-xs">{NOTES_PARSE_FAILED.description}</div>
+        <div className="font-medium">{t("notes.parseFailed.title")}</div>
+        <div className="mt-1 text-xs">{t("notes.parseFailed.description")}</div>
         <details className="mt-3 rounded-md border border-amber-300 bg-white px-3 py-2 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-card dark:text-amber-200">
-          <summary className="cursor-pointer font-medium">{NOTES_PARSE_FAILED.raw_label}</summary>
+          <summary className="cursor-pointer font-medium">
+            {t("notes.parseFailed.rawLabel")}
+          </summary>
           <pre className="mt-2 whitespace-pre-wrap wrap-break-word font-mono">{message}</pre>
         </details>
       </div>

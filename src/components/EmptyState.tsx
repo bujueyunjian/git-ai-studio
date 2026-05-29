@@ -1,8 +1,7 @@
 import { ArrowRight } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-
-import { MSG } from "../lib/copy";
+import { useTranslation } from "react-i18next";
 
 /**
  * 真实"degraded 空态"卡(未选仓库 / 缺二进制等)。
@@ -25,6 +24,7 @@ export function EmptyState({
   /** amber = 警告(语义色保留);neutral = 中性(走 muted)。 */
   tone?: "amber" | "neutral";
 }) {
+  const { t } = useTranslation();
   const ring =
     tone === "amber"
       ? "bg-amber-100 text-amber-600 dark:bg-amber-950/40"
@@ -46,7 +46,7 @@ export function EmptyState({
             {ctaLabel} <ArrowRight className="h-3.5 w-3.5" />
           </button>
         )}
-        <p className="mt-3 text-[11px] text-muted-foreground">{MSG.noUploadNotice}</p>
+        <p className="mt-3 text-[11px] text-muted-foreground">{t("common.noUploadNotice")}</p>
       </div>
     </div>
   );

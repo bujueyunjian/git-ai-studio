@@ -2,7 +2,7 @@
 // 与 PeoplePage 组件分离,既便于单测(people.contract.test),也满足 react-refresh
 // 「组件文件只导出组件」的约束。
 
-import { PEOPLE_TABLE_HEADERS } from "../lib/copy";
+import i18n from "../i18n";
 import type { PersonRow } from "../lib/types";
 
 /** 可排序字段。total 与 ai_share 是派生列,但和原列一起放进同一 union 便于排序句法统一。 */
@@ -72,14 +72,14 @@ function compareByField(a: PersonRow, b: PersonRow, field: SortField): number {
 /** CSV 表头与数据列一一对齐。字段含逗号 / 双引号 / 换行时按 RFC 4180 转义。 */
 export function buildCsv(rows: PersonRow[]): string {
   const headers = [
-    PEOPLE_TABLE_HEADERS.author_name,
-    PEOPLE_TABLE_HEADERS.author_email,
-    PEOPLE_TABLE_HEADERS.commits,
-    PEOPLE_TABLE_HEADERS.human_additions,
-    PEOPLE_TABLE_HEADERS.unknown_additions,
-    PEOPLE_TABLE_HEADERS.ai_additions,
-    PEOPLE_TABLE_HEADERS.total_additions,
-    PEOPLE_TABLE_HEADERS.ai_share,
+    i18n.t("people.tableHeaders.authorName"),
+    i18n.t("people.tableHeaders.authorEmail"),
+    i18n.t("people.tableHeaders.commits"),
+    i18n.t("people.tableHeaders.humanAdditions"),
+    i18n.t("people.tableHeaders.unknownAdditions"),
+    i18n.t("people.tableHeaders.aiAdditions"),
+    i18n.t("people.tableHeaders.totalAdditions"),
+    i18n.t("people.tableHeaders.aiShare"),
   ];
   const lines: string[] = [headers.map(csvCell).join(",")];
   for (const r of rows) {

@@ -7,8 +7,8 @@
 // - 不引入虚拟列表;典型 N <= 几千项,ScrollArea 即可
 
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { NOTES_TEXT } from "../lib/copy";
 import { cn } from "../lib/cn";
 import type { NoteListEntry } from "../lib/types";
 
@@ -19,6 +19,7 @@ export interface NotesListProps {
 }
 
 export function NotesList({ notes, selectedSha, onSelect }: NotesListProps) {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState("");
 
   const filtered = useMemo(() => {
@@ -39,7 +40,7 @@ export function NotesList({ notes, selectedSha, onSelect }: NotesListProps) {
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder={NOTES_TEXT.searchPlaceholder}
+          placeholder={t("notes.searchPlaceholder")}
           className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs shadow-xs focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-ring dark:border-border dark:bg-card"
         />
         <div className="mt-1 text-[10px] text-slate-400">
@@ -48,7 +49,7 @@ export function NotesList({ notes, selectedSha, onSelect }: NotesListProps) {
       </div>
       <div className="flex-1 overflow-y-auto px-1 pb-2">
         {filtered.length === 0 ? (
-          <div className="px-2 py-4 text-center text-xs text-slate-400">{NOTES_TEXT.listEmpty}</div>
+          <div className="px-2 py-4 text-center text-xs text-slate-400">{t("notes.listEmpty")}</div>
         ) : (
           <ul className="space-y-0.5">
             {filtered.map((n) => (

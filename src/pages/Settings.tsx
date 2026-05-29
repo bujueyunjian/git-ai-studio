@@ -20,6 +20,7 @@ import {
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { useUpdate } from "../contexts/UpdateContext";
 import { relaunchApp, type UpdateProgressEvent } from "../lib/updater";
@@ -46,7 +47,6 @@ import {
   subscribeSystemTheme,
   type Theme,
 } from "../lib/theme";
-import { EFFECTIVE_IGNORE, GIT_AI_ACCOUNT, LOW_AI_SHARE_ALERT } from "../lib/copy";
 import i18n, { setLanguage, type SupportedLanguage } from "../i18n";
 import { LowAiShareToastCard } from "../components/LowAiShareWatcher";
 import { DAEMON_RESET_EVENT, clearDaemonSilence } from "../lib/daemonNotifier";
@@ -84,6 +84,7 @@ const SETTINGS_TABS: Array<{ id: SettingsTabId; label: string }> = [
 ];
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const { navigate } = useRouter();
   const [tab, setTab] = useState<SettingsTabId>("general");
@@ -277,8 +278,12 @@ export default function SettingsPage() {
     toast.custom(
       (id) => (
         <LowAiShareToastCard
-          title={LOW_AI_SHARE_ALERT.toast_title(exampleShare, lowAiThreshold, "示例仓库")}
-          description={LOW_AI_SHARE_ALERT.toast_description}
+          title={t("lowAiShare.toastTitleWithRepoTemplate", {
+            pct: exampleShare,
+            threshold: lowAiThreshold,
+            repoName: "示例仓库",
+          })}
+          description={t("lowAiShare.toastDescription")}
           onView={() => {}}
           onDismiss={() => {}}
           onClose={() => toast.dismiss(id)}
@@ -725,8 +730,8 @@ export default function SettingsPage() {
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{LOW_AI_SHARE_ALERT.settings_title}</div>
-              <p className="mt-0.5 text-xs text-slate-500">{LOW_AI_SHARE_ALERT.settings_hint}</p>
+              <div className="text-sm font-medium">{t("lowAiShare.settingsTitle")}</div>
+              <p className="mt-0.5 text-xs text-slate-500">{t("lowAiShare.settingsHint")}</p>
             </div>
             <Switch
               checked={lowAiEnabled}
@@ -738,9 +743,7 @@ export default function SettingsPage() {
           {lowAiEnabled && (
             <div className="space-y-2 pl-1">
               <div className="flex items-center justify-between gap-3">
-                <label className="text-xs text-slate-500">
-                  {LOW_AI_SHARE_ALERT.threshold_label}
-                </label>
+                <label className="text-xs text-slate-500">{t("lowAiShare.thresholdLabel")}</label>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   {LOW_AI_SHARE_THRESHOLD_OPTIONS.map((n) => {
                     const active = !showCustomThreshold && lowAiThreshold === n;
@@ -822,10 +825,10 @@ export default function SettingsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <label className="text-xs font-medium text-foreground">
-                      {LOW_AI_SHARE_ALERT.target_emails_label}
+                      {t("lowAiShare.targetEmailsLabel")}
                     </label>
                     <p className="mt-0.5 text-[11px] text-slate-500">
-                      {LOW_AI_SHARE_ALERT.target_emails_help}
+                      {t("lowAiShare.targetEmailsHelp")}
                     </p>
                     {targetEmailsDraft.trim().length === 0 && (
                       <p className="mt-0.5 text-[11px] text-slate-400">
@@ -847,14 +850,14 @@ export default function SettingsPage() {
                 <textarea
                   value={targetEmailsDraft}
                   onChange={(e) => setTargetEmailsDraft(e.target.value)}
-                  placeholder={LOW_AI_SHARE_ALERT.target_emails_placeholder}
+                  placeholder={t("lowAiShare.targetEmailsPlaceholder")}
                   rows={3}
                   className="min-h-20 resize-y rounded-md border border-slate-200 px-2 py-1.5 font-mono text-xs dark:border-border dark:bg-card"
                 />
               </div>
               <div className="grid gap-3 rounded-md border border-border p-3 md:grid-cols-2">
                 <NumberSetting
-                  label={LOW_AI_SHARE_ALERT.remind_interval_label}
+                  label={t("lowAiShare.remindIntervalLabel")}
                   value={lowAiRemindInterval}
                   min={LOW_AI_SHARE_MIN_REMIND_INTERVAL_MINUTES}
                   max={LOW_AI_SHARE_MAX_REMIND_INTERVAL_MINUTES}
@@ -868,7 +871,7 @@ export default function SettingsPage() {
                   ]}
                 />
                 <NumberSetting
-                  label={LOW_AI_SHARE_ALERT.dismiss_minutes_label}
+                  label={t("lowAiShare.dismissMinutesLabel")}
                   value={lowAiDismissMinutes}
                   min={LOW_AI_SHARE_MIN_DISMISS_MINUTES}
                   max={LOW_AI_SHARE_MAX_DISMISS_MINUTES}
@@ -884,10 +887,10 @@ export default function SettingsPage() {
               </div>
               <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-border dark:bg-slate-900/30 dark:text-slate-300">
                 <div className="mb-1.5 font-medium text-foreground">
-                  {LOW_AI_SHARE_ALERT.rules_title}
+                  {t("lowAiShare.rulesTitle")}
                 </div>
                 <ul className="list-disc space-y-1 pl-4">
-                  {LOW_AI_SHARE_ALERT.rules.map((rule) => (
+                  {(t("lowAiShare.rules", { returnObjects: true }) as string[]).map((rule) => (
                     <li key={rule}>{rule}</li>
                   ))}
                 </ul>
@@ -1055,22 +1058,24 @@ export default function SettingsPage() {
 
 // ============ P11-D git-ai 账号卡 ============
 
-function stateLabel(s: AuthState): { text: string; tone: "ok" | "warn" | "err" | "muted" } {
-  switch (s.kind) {
-    case "logged_in":
-      return { text: GIT_AI_ACCOUNT.state_logged_in, tone: "ok" };
-    case "logged_out":
-      return { text: GIT_AI_ACCOUNT.state_logged_out, tone: "muted" };
-    case "refresh_expired":
-      return { text: GIT_AI_ACCOUNT.state_refresh_expired, tone: "warn" };
-    case "error":
-      return { text: `${GIT_AI_ACCOUNT.state_error}: ${s.message}`, tone: "err" };
-  }
-}
-
 function GitAiAccountCard() {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  /** 将登录态枚举映射为显示文本 + 色调。t 从外层组件传入,确保语言切换后重渲染。 */
+  function stateLabel(s: AuthState): { text: string; tone: "ok" | "warn" | "err" | "muted" } {
+    switch (s.kind) {
+      case "logged_in":
+        return { text: t("gitAiAccount.stateLoggedIn"), tone: "ok" };
+      case "logged_out":
+        return { text: t("gitAiAccount.stateLoggedOut"), tone: "muted" };
+      case "refresh_expired":
+        return { text: t("gitAiAccount.stateRefreshExpired"), tone: "warn" };
+      case "error":
+        return { text: `${t("gitAiAccount.stateError")}: ${s.message}`, tone: "err" };
+    }
+  }
   const whoamiQ = useQuery<WhoamiResult>({
     queryKey: ["whoami"],
     queryFn: getWhoami,
@@ -1080,12 +1085,12 @@ function GitAiAccountCard() {
     mutationFn: () => logoutGitAi(),
     onSuccess: () => {
       setConfirmOpen(false);
-      toast.success(GIT_AI_ACCOUNT.logout_ok_toast);
+      toast.success(t("gitAiAccount.logoutOkToast"));
       qc.invalidateQueries({ queryKey: ["whoami"] });
       qc.invalidateQueries({ queryKey: ["diagnose_environment"] });
     },
     onError: (e) =>
-      toast.error(GIT_AI_ACCOUNT.logout_failed, { description: (e as Error).message }),
+      toast.error(t("gitAiAccount.logoutFailed"), { description: (e as Error).message }),
   });
 
   const data = whoamiQ.data;
@@ -1106,7 +1111,7 @@ function GitAiAccountCard() {
     <section className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-medium">
-          <UserCircle2 className="h-4 w-4 text-slate-500" /> {GIT_AI_ACCOUNT.title}
+          <UserCircle2 className="h-4 w-4 text-slate-500" /> {t("gitAiAccount.title")}
         </h2>
         <button
           type="button"
@@ -1115,14 +1120,14 @@ function GitAiAccountCard() {
           className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:hover:bg-slate-800"
         >
           <RefreshCw className={`h-3 w-3 ${whoamiQ.isFetching ? "animate-spin" : ""}`} />
-          {whoamiQ.isFetching ? GIT_AI_ACCOUNT.refreshing : GIT_AI_ACCOUNT.refresh}
+          {whoamiQ.isFetching ? t("gitAiAccount.refreshing") : t("gitAiAccount.refresh")}
         </button>
       </div>
-      <p className="mt-1 text-[11px] text-slate-500">{GIT_AI_ACCOUNT.hint}</p>
+      <p className="mt-1 text-[11px] text-slate-500">{t("gitAiAccount.hint")}</p>
 
       {data?.status === "degraded" && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-          {GIT_AI_ACCOUNT.degraded_git_ai_missing}
+          {t("gitAiAccount.degradedGitAiMissing")}
         </p>
       )}
 
@@ -1178,18 +1183,18 @@ function GitAiAccountCard() {
           >
             {logoutM.isPending && <Loader2 className="h-3 w-3 animate-spin" />}
             <LogOut className="h-3 w-3" />
-            {GIT_AI_ACCOUNT.logout_button}
+            {t("gitAiAccount.logoutButton")}
           </button>
         ) : payload && payload.state.kind !== "logged_in" ? (
-          <p className="text-[11px] text-slate-500">{GIT_AI_ACCOUNT.cli_login_hint}</p>
+          <p className="text-[11px] text-slate-500">{t("gitAiAccount.cliLoginHint")}</p>
         ) : null}
       </div>
 
       <Dialog
         open={confirmOpen}
         onOpenChange={(v) => !logoutM.isPending && setConfirmOpen(v)}
-        title={GIT_AI_ACCOUNT.logout_confirm_title}
-        description={GIT_AI_ACCOUNT.logout_confirm_description}
+        title={t("gitAiAccount.logoutConfirmTitle")}
+        description={t("gitAiAccount.logoutConfirmDescription")}
         dismissible={!logoutM.isPending}
         footer={
           <>
@@ -1199,7 +1204,7 @@ function GitAiAccountCard() {
               disabled={logoutM.isPending}
               className="rounded-md border border-slate-200 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:hover:bg-slate-800"
             >
-              {GIT_AI_ACCOUNT.logout_cancel}
+              {t("gitAiAccount.logoutCancel")}
             </button>
             <button
               type="button"
@@ -1208,7 +1213,7 @@ function GitAiAccountCard() {
               className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
             >
               {logoutM.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {GIT_AI_ACCOUNT.logout_confirm_cta}
+              {t("gitAiAccount.logoutConfirmCta")}
             </button>
           </>
         }
@@ -1312,6 +1317,7 @@ function NumberSetting({
 // ============ P11-C 当前生效 ignore patterns ============
 
 function EffectiveIgnoreCard() {
+  const { t } = useTranslation();
   const q = useQuery<EffectiveIgnorePatternsResult>({
     queryKey: ["effective_ignore_patterns"],
     queryFn: listEffectiveIgnorePatterns,
@@ -1323,7 +1329,7 @@ function EffectiveIgnoreCard() {
     <section className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-sm font-medium">
-          <Filter className="h-4 w-4 text-slate-500" /> {EFFECTIVE_IGNORE.title}
+          <Filter className="h-4 w-4 text-slate-500" /> {t("effectiveIgnore.title")}
         </h2>
         <button
           type="button"
@@ -1332,16 +1338,16 @@ function EffectiveIgnoreCard() {
           className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-0.5 text-xs hover:bg-slate-50 disabled:opacity-50 dark:border-border dark:hover:bg-slate-800"
         >
           <RefreshCw className={`h-3 w-3 ${q.isFetching ? "animate-spin" : ""}`} />
-          {q.isFetching ? EFFECTIVE_IGNORE.refreshing : EFFECTIVE_IGNORE.refresh}
+          {q.isFetching ? t("effectiveIgnore.refreshing") : t("effectiveIgnore.refresh")}
         </button>
       </div>
-      <p className="mt-1 text-[11px] text-slate-500">{EFFECTIVE_IGNORE.hint}</p>
+      <p className="mt-1 text-[11px] text-slate-500">{t("effectiveIgnore.hint")}</p>
 
       {q.data?.status === "degraded" && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
           {q.data.reason.kind === "repo_missing"
-            ? EFFECTIVE_IGNORE.degraded_repo_missing
-            : EFFECTIVE_IGNORE.degraded_git_ai_missing}
+            ? t("effectiveIgnore.degradedRepoMissing")
+            : t("effectiveIgnore.degradedGitAiMissing")}
         </p>
       )}
 
@@ -1358,7 +1364,7 @@ function EffectiveIgnoreCard() {
             {q.data.payload.patterns.length} 条
           </div>
           {q.data.payload.patterns.length === 0 ? (
-            <p className="mt-2 text-xs text-slate-500">{EFFECTIVE_IGNORE.list_empty}</p>
+            <p className="mt-2 text-xs text-slate-500">{t("effectiveIgnore.listEmpty")}</p>
           ) : (
             <ul className="mt-2 max-h-64 overflow-y-auto rounded-sm border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] dark:border-border dark:bg-background">
               {q.data.payload.patterns.map((p, i) => (

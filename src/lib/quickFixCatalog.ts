@@ -57,7 +57,7 @@ export interface QuickFixEntry {
 }
 
 // ===== 内部判定辅助 =====
-// 与 lib/copy.ts:isLoggedIn 同源,但不能直接 import(那边是 buildCheckList 的私有辅助)。
+// 登录态判定:git-ai status 的 "Login Status" 以 "logged in" 开头即视为已登录。
 function isLoggedInRaw(v: string | undefined): boolean {
   if (!v) return false;
   return /^\s*logged\s*in\b/i.test(v.trim());
@@ -88,7 +88,7 @@ function hasMissingHook(agents: AgentHookStatus[]): boolean {
  * 预置 catalog。新增条目时:
  * - id 保持稳定(测试 / 用户 dismiss 记录都按 id 锁定)
  * - detect 写成纯函数;读不到的数据 fail-fast 返 false,不要兜底
- * - commands 文案在 lib/copy.ts:QUICK_FIX_CATALOG_COPY 维护翻译;这里只写 id / detect
+ * - 文案走 i18n(quickFixCatalog.* keys),由 Diagnostic 页消费;这里只写 id / detect
  */
 export const QUICK_FIX_CATALOG: readonly QuickFixEntry[] = [
   // ----- 1. git-ai 二进制不存在 -----

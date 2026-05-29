@@ -15,6 +15,7 @@ import {
   X as XIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Badge } from "../components/Badge";
@@ -32,12 +33,6 @@ import {
   uninstallGitAi,
 } from "../lib/api";
 import { cn } from "../lib/cn";
-import {
-  INSTALL_SIDE_EFFECTS,
-  MSG,
-  UNINSTALL_SIDE_EFFECTS_KEPT,
-  UNINSTALL_SIDE_EFFECTS_REMOVED,
-} from "../lib/copy";
 import type { InstallLogEvent, ReleaseSummary } from "../lib/types";
 
 type LogLine = { stream: "stdout" | "stderr" | "exit"; line: string; ts: number };
@@ -60,6 +55,7 @@ function normalizeTag(s: string | null | undefined): string {
 /** embedded=true 时收进 Setup 容器的 tab,隐藏自带大标题(Setup 已提供页级标题)。 */
 export default function InstallPage({ embedded = false }: { embedded?: boolean } = {}) {
   const qc = useQueryClient();
+  const { t } = useTranslation();
 
   const installedQ = useQuery({
     queryKey: ["installed_version"],
@@ -472,10 +468,10 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
 
       <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
         <AlertTriangle className="mr-1 inline h-3 w-3" />
-        {MSG.winPathSafeHint}
+        {t("common.winPathSafeHint")}
       </div>
 
-      <p className="text-center text-[11px] text-muted-foreground">{MSG.noUploadNotice}</p>
+      <p className="text-center text-[11px] text-muted-foreground">{t("common.noUploadNotice")}</p>
 
       {/* 卸载确认 Dialog */}
       <Dialog
@@ -516,7 +512,7 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
           <div>
             <div className="font-medium text-foreground/80">将移除的项:</div>
             <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
-              {UNINSTALL_SIDE_EFFECTS_REMOVED.map((s) => (
+              {(t("install.uninstallRemoved", { returnObjects: true }) as string[]).map((s) => (
                 <li key={s}>{s}</li>
               ))}
             </ul>
@@ -524,13 +520,13 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
           <div>
             <div className="font-medium text-emerald-700 dark:text-emerald-400">保留不动:</div>
             <ul className="mt-1 list-disc space-y-0.5 pl-5 text-emerald-700/80 dark:text-emerald-400/80">
-              {UNINSTALL_SIDE_EFFECTS_KEPT.map((s) => (
+              {(t("install.uninstallKept", { returnObjects: true }) as string[]).map((s) => (
                 <li key={s}>{s}</li>
               ))}
             </ul>
           </div>
           <div className="rounded-sm bg-amber-50 p-2 text-[12px] text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-            {MSG.mustRestartAgent}
+            {t("common.mustRestartAgent")}
           </div>
           <div>
             <label className="text-xs text-muted-foreground">输入 uninstall 确认</label>
@@ -596,7 +592,7 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
           </button>
         }
       >
-        <p>{MSG.mustRestartAgent}</p>
+        <p>{t("common.mustRestartAgent")}</p>
       </Dialog>
       <Dialog
         open={showTerminalDialog}
@@ -619,7 +615,7 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
           </button>
         }
       >
-        <p>{MSG.mustReopenTerminal}</p>
+        <p>{t("common.mustReopenTerminal")}</p>
       </Dialog>
 
       {/* 安装副作用清单(常驻可展开) */}
@@ -629,7 +625,7 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
           安装会做哪些事(展开查看)
         </summary>
         <ul className="mt-2 list-disc space-y-0.5 pl-5">
-          {INSTALL_SIDE_EFFECTS.map((s) => (
+          {(t("install.sideEffects", { returnObjects: true }) as string[]).map((s) => (
             <li key={s}>{s}</li>
           ))}
         </ul>

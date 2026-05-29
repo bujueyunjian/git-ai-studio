@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
+import i18n from "../i18n";
 import { diagnoseGitAiDaemon } from "../lib/api";
-import { DAEMON_BLOCKED_LOCK, DAEMON_STALE_LOCK } from "../lib/copy";
 import {
   DAEMON_DISMISS_HOURS,
   DAEMON_PROBE_INTERVAL_MS,
@@ -98,7 +98,10 @@ export function DaemonWatcher({ settings }: Props) {
 function buildDaemonAlertPayload(
   health: Extract<DaemonHealth, { kind: "stale_lock" | "blocked_lock_unknown_pid" }>,
 ): { title: string; body: string } {
-  const title = health.kind === "stale_lock" ? DAEMON_STALE_LOCK.title : DAEMON_BLOCKED_LOCK.title;
+  const title =
+    health.kind === "stale_lock"
+      ? i18n.t("daemon.staleLock.title")
+      : i18n.t("daemon.blockedLock.title");
   const body =
     health.kind === "stale_lock"
       ? `lock: ${health.lock_path}\npid metadata: ${health.pid_meta_path}\nlast pid: ${health.last_pid ?? "unknown"}`

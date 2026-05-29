@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { TFunction } from "i18next";
 import {
   AlertTriangle,
   ArrowDown,
@@ -12,6 +13,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Badge } from "../components/Badge";
@@ -28,12 +30,6 @@ import {
   restoreClaudeSettings,
 } from "../lib/api";
 import { cn } from "../lib/cn";
-import {
-  HOOKS_MODE_DESCRIPTIONS,
-  HOOKS_SWITCH_SIDE_EFFECTS_TO_NONE,
-  HOOKS_SWITCH_SIDE_EFFECTS_TO_OFFICIAL,
-  MSG,
-} from "../lib/copy";
 import type { HooksMode, InstallLogEvent, SettingsBackup } from "../lib/types";
 
 type LogLine = { stream: "stdout" | "stderr" | "exit"; line: string; ts: number };
@@ -45,6 +41,7 @@ function genJobId() {
 /** embedded=true 时收进 Setup 容器的 tab,隐藏自带大标题(Setup 已提供页级标题)。 */
 export default function HooksPage({ embedded = false }: { embedded?: boolean } = {}) {
   const qc = useQueryClient();
+  const { t } = useTranslation();
   const [pendingMode, setPendingMode] = useState<HooksMode | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [logs, setLogs] = useState<LogLine[]>([]);
@@ -216,7 +213,7 @@ export default function HooksPage({ embedded = false }: { embedded?: boolean } =
           </button>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          {HOOKS_MODE_DESCRIPTIONS[(status?.mode ?? "none") as "official" | "none"]}
+          {t(`hooks.mode.${status?.mode ?? "none"}` as never)}
         </p>
 
         <div className="mt-3">
@@ -254,7 +251,7 @@ export default function HooksPage({ embedded = false }: { embedded?: boolean } =
         </div>
         <p className="mt-2 rounded-sm bg-amber-50 p-2 text-[11px] text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mr-1 inline h-3 w-3" />
-          {MSG.ccSwitchWarning}
+          {t("common.ccSwitchWarning")}
         </p>
       </section>
 
@@ -356,13 +353,13 @@ export default function HooksPage({ embedded = false }: { embedded?: boolean } =
             <div>
               <div className="font-medium text-foreground/80">将会做这些:</div>
               <ul className="mt-1 list-disc space-y-0.5 pl-5 text-muted-foreground">
-                {sideEffectsFor(pendingMode).map((s) => (
+                {sideEffectsFor(pendingMode, t).map((s) => (
                   <li key={s}>{s}</li>
                 ))}
               </ul>
             </div>
             <div className="rounded-sm bg-amber-50 p-2 text-[12px] text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-              {MSG.mustRestartAgent}
+              {t("common.mustRestartAgent")}
             </div>
             <div>
               <label className="text-xs text-muted-foreground">
@@ -434,7 +431,7 @@ export default function HooksPage({ embedded = false }: { embedded?: boolean } =
           </button>
         }
       >
-        <p>{MSG.mustRestartAgent}</p>
+        <p>{t("common.mustRestartAgent")}</p>
       </Dialog>
       <Dialog
         open={showTerminalDialog}
@@ -454,7 +451,7 @@ export default function HooksPage({ embedded = false }: { embedded?: boolean } =
           </button>
         }
       >
-        <p>{MSG.mustReopenTerminal}</p>
+        <p>{t("common.mustReopenTerminal")}</p>
       </Dialog>
 
       {/* 失败 Dialog */}
@@ -510,12 +507,14 @@ export default function HooksPage({ embedded = false }: { embedded?: boolean } =
   );
 }
 
-function sideEffectsFor(mode: HooksMode): string[] {
+function sideEffectsFor(mode: HooksMode, t: TFunction): string[] {
   switch (mode) {
     case "official":
-      return HOOKS_SWITCH_SIDE_EFFECTS_TO_OFFICIAL;
+      return t("hooks.switchSideEffects.toOfficial", {
+        returnObjects: true,
+      }) as unknown as string[];
     case "none":
-      return HOOKS_SWITCH_SIDE_EFFECTS_TO_NONE;
+      return t("hooks.switchSideEffects.toNone", { returnObjects: true }) as unknown as string[];
   }
 }
 

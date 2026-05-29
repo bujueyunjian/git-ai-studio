@@ -25,11 +25,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { currentGitUserEmail, currentRepo, getHistory, getPeopleBreakdown } from "../lib/api";
 import { notify } from "../lib/osNotify";
-import { LOW_AI_SHARE_ALERT } from "../lib/copy";
 import {
   LOW_AI_SHARE_CHECK_INTERVAL_MS,
   LOW_AI_SHARE_DEFAULT_DISMISS_MINUTES,
@@ -68,6 +68,7 @@ interface Props {
 }
 
 export function LowAiShareWatcher({ settings, onNavigate }: Props) {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const lowAi = settings?.notifications?.low_ai_share;
   const enabled = lowAi?.enabled ?? false;
@@ -230,10 +231,13 @@ export function LowAiShareWatcher({ settings, onNavigate }: Props) {
 
     const pct = summary.sharePercent ?? 0;
     const repoName = repoQ.data?.name ?? null;
+    const toastTitle = repoName
+      ? t("lowAiShare.toastTitleWithRepoTemplate", { pct, threshold, repoName })
+      : t("lowAiShare.toastTitleTemplate", { pct, threshold });
     // OS 通知:与应用内 toast 并行推送,让用户在窗口最小化 / 隐藏到托盘时仍可见。
     // notify() 内部已做权限缓存与失败吞咽,不需要前端 catch。
     void notify(
-      LOW_AI_SHARE_ALERT.toast_title(pct, threshold, repoName),
+      toastTitle,
       `仓库: ${repoPath}\n统计对象: ${scopeLabel}\n近 ${LOW_AI_SHARE_WINDOW_DAYS} 天新增: ${summary.totalAdditions}\nAI 新增: ${summary.aiAdditions}\n提醒间隔: ${formatMinutes(remindIntervalMinutes)}`,
     );
     const dismiss = () => {
@@ -245,7 +249,9 @@ export function LowAiShareWatcher({ settings, onNavigate }: Props) {
       // 双保险:同步刷新 lastShownAt,即便 dismissedUntil 因任何边界(scope 切换等)失效,
       // cross_session_cooldown 也会按 remindInterval 兜住。
       writeMsToStorage(lastShownKey(repoPath, scopeKey), dismissedAt);
-      toast.info(LOW_AI_SHARE_ALERT.dismissed_toast(formatMinutes(dismissMinutes)));
+      toast.info(
+        t("lowAiShare.dismissedToastTemplate", { duration: formatMinutes(dismissMinutes) }),
+      );
     };
 
     // duration: Infinity —— 不自动消失,必须用户显式操作才关闭。
@@ -258,12 +264,14 @@ export function LowAiShareWatcher({ settings, onNavigate }: Props) {
     toast.custom(
       (id) => (
         <LowAiShareToastCard
-          title={LOW_AI_SHARE_ALERT.toast_title(pct, threshold, repoName)}
-          description={`${LOW_AI_SHARE_ALERT.toast_description} ${scopeLabel}。`}
+          title={toastTitle}
+          description={`${t("lowAiShare.toastDescription")} ${scopeLabel}。`}
           onView={() => onNavigate("dashboard")}
           onDismiss={dismiss}
           onClose={() => toast.dismiss(id)}
-          dismissLabel={LOW_AI_SHARE_ALERT.toast_action_dismiss(formatMinutes(dismissMinutes))}
+          dismissLabel={t("lowAiShare.toastActionDismissTemplate", {
+            duration: formatMinutes(dismissMinutes),
+          })}
         />
       ),
       { duration: Infinity, unstyled: true, id: toastId },
@@ -285,6 +293,7 @@ export function LowAiShareWatcher({ settings, onNavigate }: Props) {
     onNavigate,
     usePeopleBreakdown,
     useRepoSummary,
+    t,
   ]);
 
   return null;
@@ -308,7 +317,7 @@ export function LowAiShareToastCard({
   onView,
   onDismiss,
   onClose,
-  dismissLabel = LOW_AI_SHARE_ALERT.toast_action_dismiss("24 小时"),
+  dismissLabel,
 }: {
   title: string;
   description: string;
@@ -317,6 +326,10 @@ export function LowAiShareToastCard({
   onClose: () => void;
   dismissLabel?: string;
 }) {
+  const { t } = useTranslation();
+  // 调用方未传 dismissLabel 时回落到默认 24 小时文案(Settings「测试一下」会显式传值)。
+  const resolvedDismissLabel =
+    dismissLabel ?? t("lowAiShare.toastActionDismissTemplate", { duration: "24 小时" });
   const handleView = () => {
     onView();
     onClose();
@@ -345,14 +358,14 @@ export function LowAiShareToastCard({
           onClick={handleView}
           className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90"
         >
-          {LOW_AI_SHARE_ALERT.toast_action_view}
+          {t("lowAiShare.toastActionView")}
         </button>
         <button
           type="button"
           onClick={handleDismiss}
           className="rounded-md border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-50 dark:border-border dark:hover:bg-slate-800"
         >
-          {dismissLabel}
+          {resolvedDismissLabel}
         </button>
       </div>
     </div>

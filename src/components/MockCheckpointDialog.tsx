@@ -13,11 +13,11 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { Loader2, ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Dialog } from "./ui/DialogShell";
 import { gitStatusPorcelain, mockCheckpoint } from "../lib/api";
-import { CHECKPOINTS_MOCK_DIALOG } from "../lib/copy";
 import type { GitStatusFile, MockPreset } from "../lib/types";
 
 interface Props {
@@ -38,6 +38,7 @@ const DIRTY_PREVIEW_LIMIT = 20;
 const DIRTY_WARN_THRESHOLD = 20;
 
 export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Props) {
+  const { t } = useTranslation();
   const [pathspecs, setPathspecs] = useState("");
   const [confirm, setConfirm] = useState("");
   const [dirty, setDirty] = useState<GitStatusFile[] | null>(null);
@@ -89,7 +90,9 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
   );
 
   const canSubmit =
-    !running && confirm.trim() === CHECKPOINTS_MOCK_DIALOG.confirm_placeholder && exitCode === null;
+    !running &&
+    confirm.trim() === t("checkpoints.mockDialog.confirmPlaceholder") &&
+    exitCode === null;
 
   const dirtyCount = dirty?.length ?? 0;
   const showDirtyWarn = parsedPathspecs.length === 0 && dirtyCount > DIRTY_WARN_THRESHOLD;
@@ -116,8 +119,8 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
         const code = e.payload.code ?? 0;
         setExitCode(code);
         if (code === 0) {
-          toast.success(CHECKPOINTS_MOCK_DIALOG.done_ok, {
-            description: CHECKPOINTS_MOCK_DIALOG.fire_and_forget_hint,
+          toast.success(t("checkpoints.mockDialog.doneOk"), {
+            description: t("checkpoints.mockDialog.fireAndForgetHint"),
           });
           // 给 daemon 一点时间落盘,然后让父组件 invalidate
           window.setTimeout(() => {
@@ -152,10 +155,10 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
       title={
         <div className="flex items-center gap-2">
           <ShieldAlert className="h-4 w-4 text-amber-600" />
-          {CHECKPOINTS_MOCK_DIALOG.title_template(presetLabel)}
+          {t("checkpoints.mockDialog.titleTemplate", { preset: presetLabel })}
         </div>
       }
-      description={CHECKPOINTS_MOCK_DIALOG.intro}
+      description={t("checkpoints.mockDialog.intro")}
       size="lg"
       dismissible={!running || exitCode !== null}
     >
@@ -166,28 +169,30 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
             副作用
           </h3>
           <ul className="list-disc space-y-1 pl-5 text-[12px] text-foreground/80">
-            {CHECKPOINTS_MOCK_DIALOG.side_effects.map((s) => (
-              <li key={s}>{s}</li>
-            ))}
+            {(t("checkpoints.mockDialog.sideEffects", { returnObjects: true }) as string[]).map(
+              (s) => (
+                <li key={s}>{s}</li>
+              ),
+            )}
           </ul>
         </section>
 
         {/* pathspecs 输入 */}
         <section>
           <label className="mb-1 block text-xs font-medium text-muted-foreground">
-            {CHECKPOINTS_MOCK_DIALOG.pathspecs_label}
+            {t("checkpoints.mockDialog.pathspecsLabel")}
           </label>
           <textarea
             value={pathspecs}
             onChange={(e) => setPathspecs(e.target.value)}
-            placeholder={CHECKPOINTS_MOCK_DIALOG.pathspecs_placeholder}
+            placeholder={t("checkpoints.mockDialog.pathspecsPlaceholder")}
             spellCheck={false}
             rows={3}
             disabled={running}
             className="w-full rounded-md border border-border bg-card px-2 py-1.5 font-mono text-xs shadow-xs focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-ring dark:border-border dark:bg-card"
           />
           <p className="mt-1 text-[10px] text-muted-foreground">
-            {CHECKPOINTS_MOCK_DIALOG.pathspecs_help}
+            {t("checkpoints.mockDialog.pathspecsHelp")}
           </p>
         </section>
 
@@ -195,7 +200,7 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
         {parsedPathspecs.length === 0 && (
           <section>
             <h3 className="mb-1 text-xs font-medium text-muted-foreground">
-              {CHECKPOINTS_MOCK_DIALOG.dirty_preview_title}
+              {t("checkpoints.mockDialog.dirtyPreviewTitle")}
             </h3>
             {dirty === null && !dirtyError ? (
               <div className="text-[11px] text-muted-foreground">
@@ -204,7 +209,7 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
               </div>
             ) : dirtyError ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-                {CHECKPOINTS_MOCK_DIALOG.dirty_preview_unavailable}
+                {t("checkpoints.mockDialog.dirtyPreviewUnavailable")}
               </div>
             ) : dirtyCount === 0 ? (
               <div className="text-[11px] text-muted-foreground">无 dirty 文件</div>
@@ -220,14 +225,14 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
                 </ul>
                 {dirtyCount > DIRTY_PREVIEW_LIMIT && (
                   <p className="mt-1 text-[10px] text-muted-foreground">
-                    {CHECKPOINTS_MOCK_DIALOG.dirty_preview_more_template(
-                      dirtyCount - DIRTY_PREVIEW_LIMIT,
-                    )}
+                    {t("checkpoints.mockDialog.dirtyPreviewMoreTemplate", {
+                      n: dirtyCount - DIRTY_PREVIEW_LIMIT,
+                    })}
                   </p>
                 )}
                 {showDirtyWarn && (
                   <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-                    {CHECKPOINTS_MOCK_DIALOG.dirty_preview_too_many_warn_template(dirtyCount)}
+                    {t("checkpoints.mockDialog.dirtyPreviewTooManyWarnTemplate", { n: dirtyCount })}
                   </div>
                 )}
               </>
@@ -239,13 +244,13 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
         {exitCode === null && (
           <section>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
-              {CHECKPOINTS_MOCK_DIALOG.confirm_input_label}
+              {t("checkpoints.mockDialog.confirmInputLabel")}
             </label>
             <input
               type="text"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              placeholder={CHECKPOINTS_MOCK_DIALOG.confirm_placeholder}
+              placeholder={t("checkpoints.mockDialog.confirmPlaceholder")}
               autoComplete="off"
               spellCheck={false}
               disabled={running}
@@ -258,7 +263,7 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
               className="w-40 rounded-md border border-border bg-card px-2 py-1 font-mono text-xs shadow-xs focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-ring dark:border-border dark:bg-card"
             />
             <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-300">
-              {CHECKPOINTS_MOCK_DIALOG.irreversible_warn}
+              {t("checkpoints.mockDialog.irreversibleWarn")}
             </p>
           </section>
         )}
@@ -267,7 +272,7 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
         {(running || exitCode !== null) && (
           <section>
             <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {CHECKPOINTS_MOCK_DIALOG.log_title}
+              {t("checkpoints.mockDialog.logTitle")}
             </h3>
             <div
               role="log"
@@ -278,7 +283,7 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
               {logs.length === 0 ? (
                 <span className="text-muted-foreground">
                   <Loader2 className="mr-1 inline h-3 w-3 animate-spin" />
-                  {CHECKPOINTS_MOCK_DIALOG.starting}
+                  {t("checkpoints.mockDialog.starting")}
                 </span>
               ) : (
                 logs.map((l, i) => (
@@ -299,7 +304,7 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
             </div>
             {exitCode === 0 && (
               <p className="mt-2 text-[11px] text-emerald-700 dark:text-emerald-300">
-                {CHECKPOINTS_MOCK_DIALOG.fire_and_forget_hint}
+                {t("checkpoints.mockDialog.fireAndForgetHint")}
               </p>
             )}
           </section>
@@ -313,7 +318,7 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
           disabled={running && exitCode === null}
           className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:text-muted-foreground dark:hover:bg-muted"
         >
-          {CHECKPOINTS_MOCK_DIALOG.cancel}
+          {t("checkpoints.mockDialog.cancel")}
         </button>
         <button
           type="button"
@@ -324,10 +329,10 @@ export function MockCheckpointDialog({ open, preset, onOpenChange, onDone }: Pro
           {running ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {CHECKPOINTS_MOCK_DIALOG.running}
+              {t("checkpoints.mockDialog.running")}
             </>
           ) : (
-            CHECKPOINTS_MOCK_DIALOG.start
+            t("checkpoints.mockDialog.start")
           )}
         </button>
       </div>

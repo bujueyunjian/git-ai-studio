@@ -11,6 +11,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { Badge } from "../components/Badge";
@@ -32,8 +33,31 @@ import {
 } from "../lib/api";
 import { notify } from "../lib/osNotify";
 import { cn } from "../lib/cn";
-import { DAEMON_BLOCKED_LOCK, DAEMON_STALE_LOCK, MSG, QUICK_FIX_CATALOG_COPY } from "../lib/copy";
 import { buildCheckList, buildOverviewChips } from "../lib/diagnosticChecks";
+
+// ===== daemon lock 清理命令生成（本地逻辑，与文案无关） =====
+
+/** 僵尸 lock：进程已死，直接删除 lock/pid 文件 */
+const staleLockCmd = {
+  forWindows: (lockPath: string, pidPath: string) => `del /f /q "${lockPath}" "${pidPath}"`,
+  forUnix: (lockPath: string, pidPath: string) => `rm -f "${lockPath}" "${pidPath}"`,
+};
+
+/** 进程阻塞 lock：先结束持锁进程，再删除 lock/pid 文件，最后验证 */
+const blockedLockCmd = {
+  forWindows: (lockPath: string, pidPath: string, pid: number | null) =>
+    [
+      pid === null ? "Get-Process git-ai" : `taskkill /F /T /PID ${pid}`,
+      `del /f /q "${lockPath}" "${pidPath}"`,
+      "git-ai status --json",
+    ].join("; "),
+  forUnix: (lockPath: string, pidPath: string, pid: number | null) =>
+    [
+      pid === null ? "ps -ef | grep git-ai" : `kill -9 ${pid}`,
+      `rm -f "${lockPath}" "${pidPath}"`,
+      "git-ai status --json",
+    ].join(" && "),
+};
 import { evaluateQuickFixes, type QuickFixEntry } from "../lib/quickFixCatalog";
 import type {
   AgentHookStatus,
@@ -125,6 +149,7 @@ function partitionAgentsForFix(agents: AgentHookStatus[]): {
 
 /** embedded=true 时收进 Setup 容器的 tab,Setup 已提供页级标题,这里隐藏自带大标题避免重复。 */
 export default function DiagnosticPage({ embedded = false }: { embedded?: boolean } = {}) {
+  const { t } = useTranslation();
   const { navigate } = useRouter();
   const qc = useQueryClient();
   const [fixOpen, setFixOpen] = useState(false);
@@ -247,8 +272,8 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
     onSuccess: () => {
       setFixOpen(false);
       toast.success(`已为 ${toFix.length} 个 agent 写入官方 hooks`);
-      toast.message(MSG.mustRestartAgent);
-      toast.message(MSG.mustReopenTerminal);
+      toast.message(t("common.mustRestartAgent"));
+      toast.message(t("common.mustReopenTerminal"));
       qc.invalidateQueries({ queryKey: ["diagnose_environment"] });
       qc.invalidateQueries({ queryKey: ["hooks_status"] });
       qc.invalidateQueries({ queryKey: ["claude_settings"] });
@@ -267,7 +292,7 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
     mutationFn: (agent: AgentKind) => installHooksForAgent(genJobId(), agent),
     onSuccess: (_, agent) => {
       toast.success(`已为 ${AGENT_LABEL[agent]} 触发 hook 修复`);
-      toast.message(MSG.mustRestartAgent);
+      toast.message(t("common.mustRestartAgent"));
       qc.invalidateQueries({ queryKey: ["diagnose_environment"] });
       qc.invalidateQueries({ queryKey: ["hooks_status"] });
       qc.invalidateQueries({ queryKey: ["claude_settings"] });
@@ -547,12 +572,14 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
           </section>
 
           {/* 底部隐私 + 操作提示(每次安装/改 hooks 后这两句必出现) */}
-          <p className="pt-2 text-center text-[11px] text-muted-foreground">{MSG.noUploadNotice}</p>
+          <p className="pt-2 text-center text-[11px] text-muted-foreground">
+            {t("common.noUploadNotice")}
+          </p>
           <p className="text-center text-[11px] text-amber-600 dark:text-amber-400">
-            {MSG.mustRestartAgent}
+            {t("common.mustRestartAgent")}
           </p>
           <p className="pb-4 text-center text-[11px] text-amber-600 dark:text-amber-400">
-            {MSG.mustReopenTerminal}
+            {t("common.mustReopenTerminal")}
           </p>
         </>
       )}
@@ -634,19 +661,26 @@ function QuickFixCatalogSection({
   hits: QuickFixEntry[];
   onOpenEntry: (e: QuickFixEntry) => void;
 }) {
+  const { t } = useTranslation();
   const sevTone: Record<QuickFixEntry["severity"], string> = {
     err: "bg-rose-50 border-rose-200 text-rose-700 dark:bg-rose-950/30 dark:border-rose-900/40 dark:text-rose-300",
     warn: "bg-amber-50 border-amber-200 text-amber-700 dark:bg-amber-950/30 dark:border-amber-900/40 dark:text-amber-300",
     info: "bg-primary/10 border-primary text-primary dark:bg-primary/10 dark:border-primary/40 dark:text-primary",
   };
+  // severity_label 映射：err/warn/info → quickFixCatalog.severityErr/Warn/Info
+  const severityLabel: Record<QuickFixEntry["severity"], string> = {
+    err: t("quickFixCatalog.severityErr"),
+    warn: t("quickFixCatalog.severityWarn"),
+    info: t("quickFixCatalog.severityInfo"),
+  };
   return (
     <section className="rounded-lg border border-border bg-card p-4">
       <div className="mb-2 flex items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-amber-500" />
-        <h2 className="text-sm font-medium">{QUICK_FIX_CATALOG_COPY.section_title}</h2>
+        <h2 className="text-sm font-medium">{t("quickFixCatalog.sectionTitle")}</h2>
         <Badge tone="warn">{hits.length}</Badge>
       </div>
-      <p className="mb-3 text-xs text-muted-foreground">{QUICK_FIX_CATALOG_COPY.section_hint}</p>
+      <p className="mb-3 text-xs text-muted-foreground">{t("quickFixCatalog.sectionHint")}</p>
       <ul className="space-y-2">
         {hits.map((e) => (
           <li key={e.id}>
@@ -661,7 +695,7 @@ function QuickFixCatalogSection({
                   sevTone[e.severity],
                 )}
               >
-                {QUICK_FIX_CATALOG_COPY.severity_label[e.severity]}
+                {severityLabel[e.severity]}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-foreground">{e.title}</div>
@@ -704,16 +738,19 @@ function DaemonStaleLockBanner({
   busy: boolean;
   onRepair: () => void;
 }) {
+  const { t } = useTranslation();
   const cmd = winOs
-    ? DAEMON_STALE_LOCK.cmd_for_windows(health.lock_path, health.pid_meta_path)
-    : DAEMON_STALE_LOCK.cmd_for_unix(health.lock_path, health.pid_meta_path);
+    ? staleLockCmd.forWindows(health.lock_path, health.pid_meta_path)
+    : staleLockCmd.forUnix(health.lock_path, health.pid_meta_path);
   return (
     <div className="rounded-lg border border-rose-300 bg-rose-50 p-4 dark:border-rose-900 dark:bg-rose-950/40">
       <div className="flex items-start gap-2 text-rose-700 dark:text-rose-300">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1 text-sm">
-          <div className="font-medium">{DAEMON_STALE_LOCK.title}</div>
-          <p className="mt-1 text-rose-700/80 dark:text-rose-300/80">{DAEMON_STALE_LOCK.hint}</p>
+          <div className="font-medium">{t("daemon.staleLock.title")}</div>
+          <p className="mt-1 text-rose-700/80 dark:text-rose-300/80">
+            {t("daemon.staleLock.hint")}
+          </p>
           {health.last_pid !== null && (
             <p className="mt-1 text-[11px] text-rose-700/70 dark:text-rose-300/70">
               上次 daemon PID {health.last_pid}(已不存活)
@@ -724,7 +761,7 @@ function DaemonStaleLockBanner({
             <li>{health.pid_meta_path}</li>
           </ul>
           <p className="mt-2 text-[11px] text-rose-700/80 dark:text-rose-300/80">
-            {DAEMON_STALE_LOCK.step_label}
+            {t("daemon.staleLock.stepLabel")}
           </p>
           <div className="mt-2 flex items-center gap-2 rounded-sm bg-card/60 p-2 font-mono text-[11px] dark:bg-card/60">
             <code className="flex-1 break-all">{cmd}</code>
@@ -734,7 +771,7 @@ function DaemonStaleLockBanner({
                 toast.success("清理命令已复制");
               }}
               className="rounded-sm p-1 text-rose-600 hover:bg-rose-100 dark:text-rose-400 dark:hover:bg-rose-950/40"
-              title={DAEMON_STALE_LOCK.copy_cmd_label}
+              title={t("daemon.staleLock.copyCmdLabel")}
             >
               <Copy className="h-3 w-3" />
             </button>
@@ -771,13 +808,14 @@ function DaemonBlockedLockBanner({
   busy: boolean;
   onRepair: () => void;
 }) {
+  const { t } = useTranslation();
   const cmd = winOs
-    ? DAEMON_BLOCKED_LOCK.cmd_for_windows(
+    ? blockedLockCmd.forWindows(
         health.lock_path,
         health.pid_meta_path,
         health.last_pid ?? health.candidate_pids[0] ?? null,
       )
-    : DAEMON_BLOCKED_LOCK.cmd_for_unix(
+    : blockedLockCmd.forUnix(
         health.lock_path,
         health.pid_meta_path,
         health.last_pid ?? health.candidate_pids[0] ?? null,
@@ -787,9 +825,9 @@ function DaemonBlockedLockBanner({
       <div className="flex items-start gap-2 text-amber-800 dark:text-amber-300">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1 text-sm">
-          <div className="font-medium">{DAEMON_BLOCKED_LOCK.title}</div>
+          <div className="font-medium">{t("daemon.blockedLock.title")}</div>
           <p className="mt-1 text-amber-800/80 dark:text-amber-300/80">
-            {DAEMON_BLOCKED_LOCK.hint}
+            {t("daemon.blockedLock.hint")}
           </p>
           {health.last_pid !== null && (
             <p className="mt-1 text-[11px] text-amber-800/70 dark:text-amber-300/70">
@@ -806,7 +844,7 @@ function DaemonBlockedLockBanner({
             <li>{health.pid_meta_path}</li>
           </ul>
           <p className="mt-2 text-[11px] text-amber-800/80 dark:text-amber-300/80">
-            {DAEMON_BLOCKED_LOCK.step_label}
+            {t("daemon.blockedLock.stepLabel")}
           </p>
           <div className="mt-2 flex items-center gap-2 rounded-sm bg-card/60 p-2 font-mono text-[11px] dark:bg-card/60">
             <code className="flex-1 break-all">{cmd}</code>
@@ -816,7 +854,7 @@ function DaemonBlockedLockBanner({
                 toast.success("排查命令已复制");
               }}
               className="rounded-sm p-1 text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-950/40"
-              title={DAEMON_BLOCKED_LOCK.copy_cmd_label}
+              title={t("daemon.blockedLock.copyCmdLabel")}
             >
               <Copy className="h-3 w-3" />
             </button>
@@ -892,6 +930,7 @@ function DaemonRepairConfirmBody({
 }
 
 function GitAiNotFoundEmpty({ onGoInstall }: { onGoInstall: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="flex h-full items-center justify-center p-10">
       <div className="max-w-md rounded-lg border border-border bg-card p-8 text-center shadow-xs dark:border-border dark:bg-card">
@@ -909,7 +948,7 @@ function GitAiNotFoundEmpty({ onGoInstall }: { onGoInstall: () => void }) {
         >
           前往安装 <ArrowRight className="h-3.5 w-3.5" />
         </button>
-        <p className="mt-3 text-[11px] text-muted-foreground">{MSG.noUploadNotice}</p>
+        <p className="mt-3 text-[11px] text-muted-foreground">{t("common.noUploadNotice")}</p>
       </div>
     </div>
   );

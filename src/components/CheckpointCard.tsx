@@ -20,10 +20,10 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { JsonTree } from "./JsonTree";
 import { cn } from "../lib/cn";
-import { CHECKPOINTS_CARD, CHECKPOINTS_KIND_LABELS } from "../lib/copy";
 import type { Checkpoint, CheckpointKind } from "../lib/types";
 
 const KIND_ICONS: Record<CheckpointKind, LucideIcon> = {
@@ -31,6 +31,21 @@ const KIND_ICONS: Record<CheckpointKind, LucideIcon> = {
   AiAgent: Bot,
   AiTab: Sparkles,
   KnownHuman: UserCheck,
+};
+
+/**
+ * icon/tone 是 UI 常量，与文案无关，从 copy.ts 搬至此处。
+ * i18nKey 是该 kind 在 locales 中的段名（对齐 copy.ts 里 checkpoints.kind.<i18nKey>.label/tooltip）。
+ * label/tooltip 在组件内通过 t(`checkpoints.kind.${i18nKey}.label`) 动态取值。
+ */
+const CHECKPOINT_KIND_META: Record<
+  CheckpointKind,
+  { icon: string; tone: "human" | "ai_agent" | "ai_tab" | "known_human"; i18nKey: string }
+> = {
+  Human: { icon: "User", tone: "human", i18nKey: "human" },
+  AiAgent: { icon: "Bot", tone: "ai_agent", i18nKey: "aiAgent" },
+  AiTab: { icon: "Sparkles", tone: "ai_tab", i18nKey: "aiTab" },
+  KnownHuman: { icon: "UserCheck", tone: "known_human", i18nKey: "knownHuman" },
 };
 
 const KIND_TONE_CLASS: Record<CheckpointKind, string> = {
@@ -78,8 +93,9 @@ export function CheckpointCard({
   defaultOpen = false,
   onOpenBlame,
 }: CheckpointCardProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(defaultOpen);
-  const meta = CHECKPOINTS_KIND_LABELS[cp.kind];
+  const kindMeta = CHECKPOINT_KIND_META[cp.kind];
   const Icon = KIND_ICONS[cp.kind];
 
   return (
@@ -89,7 +105,7 @@ export function CheckpointCard({
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          aria-label={open ? CHECKPOINTS_CARD.collapse : CHECKPOINTS_CARD.expand}
+          aria-label={open ? t("checkpoints.card.collapse") : t("checkpoints.card.expand")}
           className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
         >
           {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -99,10 +115,10 @@ export function CheckpointCard({
             "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
             KIND_TONE_CLASS[cp.kind],
           )}
-          title={meta.tooltip}
+          title={t(`checkpoints.kind.${kindMeta.i18nKey}.tooltip` as never)}
         >
           <Icon className="h-3 w-3" />
-          {meta.label}
+          {t(`checkpoints.kind.${kindMeta.i18nKey}.label` as never)}
         </span>
         <code className="font-mono text-xs text-foreground/80">{cp.author}</code>
         {cp.agent_id && (
@@ -121,19 +137,20 @@ export function CheckpointCard({
 
       <div className="border-t border-slate-100 px-3 py-1.5 text-[11px] text-slate-500 dark:border-border">
         <span className="font-mono">
-          {CHECKPOINTS_CARD.line_stats_template(
-            cp.line_stats.additions,
-            cp.line_stats.deletions,
-            cp.line_stats.additions_sloc,
-            cp.line_stats.deletions_sloc,
-          )}
+          {t("checkpoints.card.lineStatsTemplate", {
+            a: cp.line_stats.additions,
+            d: cp.line_stats.deletions,
+            as: cp.line_stats.additions_sloc,
+            ds: cp.line_stats.deletions_sloc,
+          })}
         </span>
         <span className="ml-3 text-slate-400">
-          {cp.entries.length} entries · {CHECKPOINTS_CARD.api_version_label} {cp.api_version || "—"}
+          {cp.entries.length} entries · {t("checkpoints.card.apiVersionLabel")}{" "}
+          {cp.api_version || "—"}
         </span>
         {cp.trace_id && (
           <code className="ml-3 font-mono text-[10px] text-slate-400">
-            {CHECKPOINTS_CARD.trace_id_label}: {cp.trace_id.slice(0, 10)}
+            {t("checkpoints.card.traceIdLabel")}: {cp.trace_id.slice(0, 10)}
           </code>
         )}
       </div>
@@ -145,7 +162,7 @@ export function CheckpointCard({
             <AgentMetadataBlock metadata={cp.agent_metadata} />
           )}
           {cp.entries.length === 0 ? (
-            <div className="text-[11px] text-slate-400">{CHECKPOINTS_CARD.no_entries}</div>
+            <div className="text-[11px] text-slate-400">{t("checkpoints.card.noEntries")}</div>
           ) : (
             <EntriesBlock entries={cp.entries} isHead={isHead} onOpenBlame={onOpenBlame} />
           )}
@@ -187,6 +204,7 @@ function KV({ label, value }: { label: string; value: string }) {
 }
 
 function AgentMetadataBlock({ metadata }: { metadata: Record<string, string> }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   return (
     <div className="rounded-md border border-border">
@@ -197,7 +215,9 @@ function AgentMetadataBlock({ metadata }: { metadata: Record<string, string> }) 
         className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
       >
         {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        <span className="font-medium">{CHECKPOINTS_CARD.agent_metadata_label.split("(")[0]}</span>
+        <span className="font-medium">
+          {t("checkpoints.card.agentMetadataLabel").split("(")[0]}
+        </span>
         <span className="text-[10px] text-slate-400">({Object.keys(metadata).length} keys)</span>
       </button>
       {open && (
@@ -218,6 +238,7 @@ function EntriesBlock({
   isHead: boolean;
   onOpenBlame: (file: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <ul className="space-y-2">
       {entries.map((entry, i) => (
@@ -233,11 +254,11 @@ function EntriesBlock({
               <button
                 type="button"
                 onClick={() => onOpenBlame(entry.file)}
-                title={CHECKPOINTS_CARD.blame_at_head_caveat}
+                title={t("checkpoints.card.blameAtHeadCaveat")}
                 className="ml-auto inline-flex items-center gap-1 rounded-sm border border-slate-200 px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:border-border dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 <ExternalLink className="h-3 w-3" />
-                {CHECKPOINTS_CARD.blame_at_head_button}
+                {t("checkpoints.card.blameAtHeadButton")}
               </button>
             )}
           </div>
@@ -257,6 +278,7 @@ function LineAttributionsTable({
 }: {
   lines: Checkpoint["entries"][number]["line_attributions"];
 }) {
+  const { t } = useTranslation();
   return (
     <table className="w-full border-collapse text-[11px]">
       <thead>
@@ -274,7 +296,11 @@ function LineAttributionsTable({
             </td>
             <td className="px-2 py-0.5 font-mono text-foreground/80">{la.author_id}</td>
             <td className="px-2 py-0.5 font-mono text-slate-500">
-              {la.overrode ? CHECKPOINTS_CARD.line_attribution_overrode_template(la.overrode) : "—"}
+              {la.overrode
+                ? t("checkpoints.card.lineAttributionOverrodeTemplate", {
+                    prev: la.overrode.slice(0, 8),
+                  })
+                : "—"}
             </td>
           </tr>
         ))}
@@ -284,6 +310,7 @@ function LineAttributionsTable({
 }
 
 function DiffBlock({ diff }: { diff: string }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const lineCount = diff.split("\n").length;
   return (
@@ -295,7 +322,9 @@ function DiffBlock({ diff }: { diff: string }) {
         className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
       >
         {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        <span className="font-medium">{CHECKPOINTS_CARD.diff_label_template(lineCount)}</span>
+        <span className="font-medium">
+          {t("checkpoints.card.diffLabelTemplate", { lines: lineCount })}
+        </span>
       </button>
       {open && (
         <pre className="max-h-96 overflow-auto border-t border-slate-100 bg-slate-50 px-2 py-1.5 font-mono text-[11px] dark:border-border dark:bg-card/40">

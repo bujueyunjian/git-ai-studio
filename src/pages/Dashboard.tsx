@@ -42,15 +42,6 @@ import { OnboardingCard } from "../components/OnboardingCard";
 import { TimeRangePicker } from "../components/TimeRangePicker";
 import { WorkingDirSummary } from "../components/WorkingDirSummary";
 import { axisDefaultProps, CHART_COLORS } from "../components/charts/theme";
-import {
-  DASHBOARD_CACHE_HINT,
-  DASHBOARD_DEGRADED,
-  DASHBOARD_EMPTY_WINDOW,
-  DASHBOARD_FAILED_HINT,
-  DASHBOARD_METRIC_TITLES,
-  DASHBOARD_TEXT,
-  DASHBOARD_TRUNCATED_HINT,
-} from "../lib/copy";
 import { currentRepo, getHistory, getRangeSummary } from "../lib/api";
 import { formatInt, formatPercent, formatRelativeFromNow } from "../lib/formulas";
 import { rangeKey } from "../lib/queryKeys";
@@ -65,7 +56,9 @@ import type {
 } from "../lib/types";
 import { useRouter } from "../router";
 
-const STALE_TIME_MS = DASHBOARD_CACHE_HINT.stale_time_seconds * 1000;
+/** dashboard 缓存过期时间(秒),对齐后端 SQLite 缓存策略。 */
+const DASHBOARD_STALE_TIME_SECONDS = 30;
+const STALE_TIME_MS = DASHBOARD_STALE_TIME_SECONDS * 1000;
 /**
  * hook 覆盖率 query 的 staleTime —— range 聚合固有耗时长(可达 50s+),且仓库级数据变化慢,
  * 用 5min 避免切窗口/刷新时频繁触发重算。比主体 30s 缓存长一个量级。
@@ -76,6 +69,7 @@ const DEFAULT_RANGE: TimeRange = { kind: "this_week" };
 const RECENT_LIMIT = 12;
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
   const [range, setRange] = useState<TimeRange>(DEFAULT_RANGE);
@@ -156,15 +150,18 @@ export default function DashboardPage() {
   // 用 Setup 容器收口环境配置,而非直接把用户甩去单页 repo/install。
   if (historyQ.data?.status === "degraded") {
     const kind = historyQ.data.reason.kind;
-    const copy = DASHBOARD_DEGRADED[kind];
+    const keyPrefix =
+      kind === "repo_missing"
+        ? "dashboard.degraded.repoMissing"
+        : "dashboard.degraded.gitAiMissing";
     return (
       <div className="mx-auto max-w-[1100px] space-y-6 px-8 py-8">
         <OnboardingCard onNavigate={(r) => router.navigate(r)} />
         <EmptyState
           Icon={kind === "repo_missing" ? FolderOpen : Activity}
-          title={copy.title}
-          description={copy.description}
-          ctaLabel={copy.cta}
+          title={t(`${keyPrefix}.title`)}
+          description={t(`${keyPrefix}.description`)}
+          ctaLabel={t(`${keyPrefix}.cta`)}
           onCta={() => router.navigate(kind === "repo_missing" ? "repo" : "install")}
         />
       </div>
@@ -230,9 +227,14 @@ export default function DashboardPage() {
       <OnboardingCard onNavigate={(r) => router.navigate(r)} />
 
       {payload.failed_shas.length > 0 && (
-        <InlineBanner kind="warn" text={DASHBOARD_FAILED_HINT(payload.failed_shas.length)} />
+        <InlineBanner
+          kind="warn"
+          text={t("dashboard.failedHint", { n: payload.failed_shas.length })}
+        />
       )}
-      {payload.truncated && <InlineBanner kind="warn" text={DASHBOARD_TRUNCATED_HINT(500)} />}
+      {payload.truncated && (
+        <InlineBanner kind="warn" text={t("dashboard.truncatedHint", { cap: 500 })} />
+      )}
 
       {payload.total_commits_in_window === 0 ? (
         <EmptyWindowCard
@@ -297,6 +299,7 @@ function Header({
   isFetching: boolean;
   onRefresh: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
@@ -321,7 +324,7 @@ function Header({
           className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs text-muted-foreground transition-colors duration-150 hover:bg-muted/60 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
-          {isFetching ? DASHBOARD_CACHE_HINT.refreshing : DASHBOARD_CACHE_HINT.refresh_now}
+          {isFetching ? t("dashboard.cacheHint.refreshing") : t("dashboard.cacheHint.refreshNow")}
         </button>
       </div>
     </div>
@@ -357,17 +360,18 @@ function HeroKpiRow({
   onRetryHookCoverage: () => void;
   onJumpHooks: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <section className="grid grid-cols-1 gap-x-12 gap-y-8 md:grid-cols-[1.4fr_1fr_1fr]">
       <HeroKpi
-        label={DASHBOARD_METRIC_TITLES.head_ai_rate}
+        label={t("dashboard.metricTitles.headAiRate")}
         value={formatPercent(aiShare)}
         delta={aiShareDelta}
         deltaSuffix="vs 上一同长度窗口"
         formulaId="ai_share"
       />
       <SecondaryKpi
-        label={DASHBOARD_METRIC_TITLES.window_ai_total}
+        label={t("dashboard.metricTitles.windowAiTotal")}
         value={formatInt(windowAiTotal)}
         unit="行"
         caption={`窗口含 ${formatInt(commitCount)} 个 commit`}
@@ -406,13 +410,14 @@ function HookCoverageKpi({
   onRetry: () => void;
   onJumpHooks: () => void;
 }) {
+  const { t } = useTranslation();
   // 数据未到位之前(loading / error)不可点跳 Hooks;有数据后整卡可点。
   if (loading) {
     return (
       <div className="flex flex-col gap-2 text-left">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {DASHBOARD_METRIC_TITLES.hook_coverage}
+            {t("dashboard.metricTitles.hookCoverage")}
           </span>
           <FormulaPopover metricId="hook_coverage_rate" />
         </div>
@@ -428,7 +433,7 @@ function HookCoverageKpi({
       <div className="flex flex-col gap-2 text-left">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {DASHBOARD_METRIC_TITLES.hook_coverage}
+            {t("dashboard.metricTitles.hookCoverage")}
           </span>
           <FormulaPopover metricId="hook_coverage_rate" />
         </div>
@@ -451,7 +456,7 @@ function HookCoverageKpi({
   }
   return (
     <SecondaryKpi
-      label={DASHBOARD_METRIC_TITLES.hook_coverage}
+      label={t("dashboard.metricTitles.hookCoverage")}
       value={formatPercent(hookCoverage)}
       caption={hookCoverageDetail ? `${hookCoverageDetail} commit 含 hook` : "—"}
       formulaId="hook_coverage_rate"
@@ -597,6 +602,7 @@ function DeltaPill({ delta, suffix }: { delta: number | null; suffix: string }) 
  * grid 几乎不可见,axis 弱化,主线用 currentColor(深色模式自动反相)。
  */
 function WindowAiChart({ daily }: { daily: DailyBucket[] }) {
+  const { t } = useTranslation();
   const data = useMemo(
     () =>
       daily.map((b) => ({
@@ -617,7 +623,7 @@ function WindowAiChart({ daily }: { daily: DailyBucket[] }) {
       </div>
       {allZero ? (
         <div className="flex h-32 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
-          {DASHBOARD_TEXT.chartAllZero}
+          {t("dashboard.chartAllZero")}
         </div>
       ) : (
         // text-primary 让 SVG 内 `stroke="currentColor"` 取品牌蓝(AI 语义色),并自动跟主题翻色
@@ -859,13 +865,14 @@ function MissingHookList({ payload }: { payload: RangeAuthorshipStatsData }) {
 // ============ 空窗口 ============
 
 function EmptyWindowCard({ range, onWiden }: { range: TimeRange; onWiden: () => void }) {
+  const { t } = useTranslation();
   const label = describeRange(range);
   const alreadyWidest = range.kind === "last_n_days" && range.days >= 90;
   return (
     <div className="rounded-md border border-dashed border-border px-8 py-10 text-center animate-in fade-in duration-200">
-      <div className="text-sm font-medium text-foreground">{DASHBOARD_EMPTY_WINDOW.title}</div>
+      <div className="text-sm font-medium text-foreground">{t("dashboard.emptyWindow.title")}</div>
       <p className="mt-1.5 text-xs text-muted-foreground">
-        {DASHBOARD_EMPTY_WINDOW.description_template(label)}
+        {t("dashboard.emptyWindow.descriptionTemplate", { rangeLabel: label })}
       </p>
       {!alreadyWidest && (
         <button
@@ -873,7 +880,7 @@ function EmptyWindowCard({ range, onWiden }: { range: TimeRange; onWiden: () => 
           onClick={onWiden}
           className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium text-foreground transition-colors duration-150 hover:bg-muted/60"
         >
-          {DASHBOARD_EMPTY_WINDOW.widen_cta}
+          {t("dashboard.emptyWindow.widenCta")}
         </button>
       )}
     </div>
@@ -920,15 +927,16 @@ function Footnote({
   totalInWindow: number;
   cachedRepoTotal: number;
 }) {
+  const { t } = useTranslation();
   const rel = fetchedAt ? formatRelativeFromNow(fetchedAt, now) : "—";
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4 text-[10px] text-muted-foreground">
       <div>
         数据更新于 <span className="font-mono tabular-nums">{rel}</span>
-        <span className="mx-1.5">·</span>缓存 30s
+        <span className="mx-1.5">·</span>缓存 {DASHBOARD_STALE_TIME_SECONDS}s
       </div>
       <div className="font-mono tabular-nums">
-        {DASHBOARD_CACHE_HINT.cached_template(cacheHits, totalInWindow)}
+        {t("dashboard.cacheHint.cachedTemplate", { hits: cacheHits, total: totalInWindow })}
         <span className="mx-1.5 opacity-60">·</span>
         本仓库累计 {cachedRepoTotal}
       </div>

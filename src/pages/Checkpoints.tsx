@@ -16,6 +16,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, AlertTriangle, FolderOpen, Loader2, Package, Plug, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { CheckpointCard } from "../components/CheckpointCard";
 import { EmptyState } from "../components/EmptyState";
@@ -29,13 +30,13 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/DropdownMenuLite";
 import { isMockRunning, listCheckpoints } from "../lib/api";
-import { CHECKPOINTS_DEGRADED, CHECKPOINTS_EMPTY_LIST, CHECKPOINTS_HEADER } from "../lib/copy";
 import type { CheckpointsResult, MockPreset } from "../lib/types";
 import { useRouter } from "../router";
 
 const STALE_TIME_MS = 30_000;
 
 export default function CheckpointsPage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
   const [mockOpen, setMockOpen] = useState(false);
@@ -62,7 +63,14 @@ export default function CheckpointsPage() {
 
   if (listQ.data?.status === "degraded") {
     const reason = listQ.data.reason.kind;
-    const copy = CHECKPOINTS_DEGRADED[reason];
+    // degraded reason → i18n key 段名映射（对齐 copy.ts checkpoints.degraded.* 键）
+    const reasonKeyMap: Record<typeof reason, string> = {
+      repo_missing: "repoMissing",
+      no_head: "noHead",
+      git_ai_missing: "gitAiMissing",
+      working_logs_dir_missing: "workingLogsDirMissing",
+    };
+    const rk = reasonKeyMap[reason];
     const ctaTarget: Record<typeof reason, "repo" | "install" | "hooks" | undefined> = {
       repo_missing: "repo",
       no_head: undefined,
@@ -70,6 +78,8 @@ export default function CheckpointsPage() {
       working_logs_dir_missing: "hooks",
     };
     const target = ctaTarget[reason];
+    // no_head 的 cta key 在 copy.ts 里是 undefined，其余都有值
+    const ctaKey = reason !== "no_head" ? t(`checkpoints.degraded.${rk}.cta` as never) : undefined;
     return (
       <EmptyState
         Icon={
@@ -81,9 +91,9 @@ export default function CheckpointsPage() {
                 ? Plug
                 : Activity
         }
-        title={copy.title}
-        description={copy.description}
-        ctaLabel={copy.cta}
+        title={t(`checkpoints.degraded.${rk}.title` as never)}
+        description={t(`checkpoints.degraded.${rk}.description` as never)}
+        ctaLabel={ctaKey}
         onCta={target ? () => router.navigate(target) : undefined}
         tone="amber"
       />
@@ -175,19 +185,20 @@ function Header({
   onMockSelect: (preset: MockPreset) => void;
   mockDisabled: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <header className="sticky top-0 z-10 -mx-6 border-b border-slate-200 bg-white/95 px-6 py-3 backdrop-blur-sm dark:border-border dark:bg-background/95">
       <div className="flex items-start gap-3">
         <div className="flex-1">
-          <h1 className="text-xl font-semibold">{CHECKPOINTS_HEADER.page_title}</h1>
-          <p className="mt-0.5 text-xs text-slate-500">{CHECKPOINTS_HEADER.subtitle}</p>
+          <h1 className="text-xl font-semibold">{t("checkpoints.header.pageTitle")}</h1>
+          <p className="mt-0.5 text-xs text-slate-500">{t("checkpoints.header.subtitle")}</p>
           <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
             <code className="rounded-sm bg-slate-100 px-2 py-0.5 font-mono dark:bg-slate-800">
-              {CHECKPOINTS_HEADER.head_sha_label} {headSha.slice(0, 12)}
+              {t("checkpoints.header.headShaLabel")} {headSha.slice(0, 12)}
             </code>
-            <span>{CHECKPOINTS_HEADER.count_template(count)}</span>
+            <span>{t("checkpoints.header.countTemplate", { n: count })}</span>
           </div>
-          <p className="mt-2 text-[11px] text-slate-400">{CHECKPOINTS_HEADER.pre_commit_note}</p>
+          <p className="mt-2 text-[11px] text-slate-400">{t("checkpoints.header.preCommitNote")}</p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -197,7 +208,7 @@ function Header({
               className="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200"
             >
               <Wrench className="h-3.5 w-3.5" />
-              {CHECKPOINTS_HEADER.debug_dropdown}
+              {t("checkpoints.header.debugDropdown")}
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
@@ -216,19 +227,20 @@ function Header({
 }
 
 function EmptyList({ onGoHooks }: { onGoHooks: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-8 text-center dark:border-border dark:bg-card/40">
       <Activity className="mx-auto h-8 w-8 text-slate-400" />
-      <div className="mt-3 text-base font-medium">{CHECKPOINTS_EMPTY_LIST.title}</div>
+      <div className="mt-3 text-base font-medium">{t("checkpoints.emptyList.title")}</div>
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-        {CHECKPOINTS_EMPTY_LIST.description}
+        {t("checkpoints.emptyList.description")}
       </p>
       <button
         type="button"
         onClick={onGoHooks}
         className="mt-4 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
       >
-        {CHECKPOINTS_EMPTY_LIST.cta_hooks}
+        {t("checkpoints.emptyList.ctaHooks")}
       </button>
     </div>
   );

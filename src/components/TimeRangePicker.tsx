@@ -9,16 +9,27 @@
 
 import { CalendarRange } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import {
-  TIME_RANGE_CUSTOM_MAX_DAYS,
-  TIME_RANGE_CUSTOM_TOO_WIDE,
-  TIME_RANGE_PRESETS,
-  TIME_RANGE_TEXT,
-} from "../lib/copy";
 import type { TimeRange } from "../lib/types";
 
 const CUSTOM_SENTINEL = "__custom__" as const;
+
+/** 自定义区间跨度上限(天)。超过则禁用应用并提示。 */
+const TIME_RANGE_CUSTOM_MAX_DAYS = 366;
+
+/** 9 个时间预设:kind 镜像 history.rs::TimeRange,labelKey 运行时经 t() 取本地化文案。 */
+const TIME_RANGE_PRESETS: ReadonlyArray<{ kind: string; labelKey: string }> = [
+  { kind: "today", labelKey: "timeRange.presets.today" },
+  { kind: "yesterday", labelKey: "timeRange.presets.yesterday" },
+  { kind: "this_week", labelKey: "timeRange.presets.thisWeek" },
+  { kind: "last_week", labelKey: "timeRange.presets.lastWeek" },
+  { kind: "this_month", labelKey: "timeRange.presets.thisMonth" },
+  { kind: "last_month", labelKey: "timeRange.presets.lastMonth" },
+  { kind: "last_7_days", labelKey: "timeRange.presets.last7Days" },
+  { kind: "last_30_days", labelKey: "timeRange.presets.last30Days" },
+  { kind: "last_90_days", labelKey: "timeRange.presets.last90Days" },
+];
 
 /** 把 TimeRange 还原为下拉选中态(给当前 range 找最匹配的预设 kind)。 */
 function rangeToSelectKey(r: TimeRange): string {
@@ -85,6 +96,7 @@ export function TimeRangePicker({
   value: TimeRange;
   onChange: (next: TimeRange) => void;
 }) {
+  const { t } = useTranslation();
   // # customModeOpen:UI 是否处于"自定义"展开态
   //
   // 历史 bug:select 点 "自定义" 时 selectKeyToRange 返回 null → 不调 onChange → value 没变 →
@@ -139,13 +151,13 @@ export function TimeRangePicker({
     const startMs = dateInputToUnixMs(customStart, false);
     const endMs = dateInputToUnixMs(customEnd, true);
     if (startMs === null || endMs === null) return null; // 还没填完
-    if (endMs < startMs) return TIME_RANGE_TEXT.customInvalidRange;
+    if (endMs < startMs) return t("timeRange.customInvalidRange");
     const spanDays = Math.ceil((endMs - startMs) / 86_400_000);
     if (spanDays > TIME_RANGE_CUSTOM_MAX_DAYS) {
-      return TIME_RANGE_CUSTOM_TOO_WIDE(TIME_RANGE_CUSTOM_MAX_DAYS);
+      return t("timeRange.customTooWideTemplate", { max: TIME_RANGE_CUSTOM_MAX_DAYS });
     }
     return null;
-  }, [customStart, customEnd]);
+  }, [customStart, customEnd, t]);
 
   const applyCustom = () => {
     const startMs = dateInputToUnixMs(customStart, false);
@@ -158,10 +170,10 @@ export function TimeRangePicker({
     <div className="flex flex-wrap items-center gap-2">
       <label className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
         <CalendarRange className="h-3 w-3" />
-        {TIME_RANGE_TEXT.pickerLabel}:
+        {t("timeRange.pickerLabel")}:
       </label>
       <select
-        aria-label={TIME_RANGE_TEXT.pickerLabel}
+        aria-label={t("timeRange.pickerLabel")}
         value={selectKey}
         onChange={(e) => {
           if (e.target.value === CUSTOM_SENTINEL) {
@@ -178,15 +190,15 @@ export function TimeRangePicker({
       >
         {TIME_RANGE_PRESETS.map((p) => (
           <option key={p.kind} value={p.kind}>
-            {p.label}
+            {t(p.labelKey as never)}
           </option>
         ))}
-        <option value={CUSTOM_SENTINEL}>{TIME_RANGE_TEXT.customLabel}</option>
+        <option value={CUSTOM_SENTINEL}>{t("timeRange.customLabel")}</option>
       </select>
       {isCustom && (
         <div className="flex flex-wrap items-center gap-1.5">
           <label className="flex items-center gap-1 text-[11px] text-slate-500">
-            {TIME_RANGE_TEXT.customStartLabel}
+            {t("timeRange.customStartLabel")}
             <input
               type="date"
               value={customStart}
@@ -195,7 +207,7 @@ export function TimeRangePicker({
             />
           </label>
           <label className="flex items-center gap-1 text-[11px] text-slate-500">
-            {TIME_RANGE_TEXT.customEndLabel}
+            {t("timeRange.customEndLabel")}
             <input
               type="date"
               value={customEnd}
@@ -209,7 +221,7 @@ export function TimeRangePicker({
             disabled={customError !== null || !customStart || !customEnd}
             className="rounded-md bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {TIME_RANGE_TEXT.customApply}
+            {t("timeRange.customApply")}
           </button>
           {customError && (
             <span className="text-[11px] text-rose-600 dark:text-rose-400">{customError}</span>

@@ -12,25 +12,19 @@
 // - s_(可能 s_::t_)→ sessions(split("::").next() 取 session_key 查 map)。
 //
 // # 隐私
-// - messages 默认折叠,折叠 trigger 显示 lock 图标 + MSG.noUploadNotice 短句(永久)
-// - 展开后顶部 amber bar 重申完整 MSG.noUploadNotice
+// - messages 默认折叠,折叠 trigger 显示 lock 图标 + 不上传提示短句(永久,t("common.noUploadNotice"))
+// - 展开后顶部 amber bar 重申完整不上传提示
 // - messages_url 只显示 + 复制,不调用 opener
 
+import type { TFunction } from "i18next";
 import { Activity, Bot, Copy, ExternalLink, FileText, Lock, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { JsonTree } from "./JsonTree";
 import { cn } from "../lib/cn";
-import {
-  MSG,
-  NOTES_ACTIONS,
-  NOTES_CHIPS,
-  NOTES_HEADER,
-  NOTES_MESSAGES,
-  NOTES_SECTION_TITLES,
-} from "../lib/copy";
 import {
   classifyNotesHash,
   parseLineRanges,
@@ -54,13 +48,18 @@ export interface NoteDetailProps {
   onNavigate: (route: "stats" | "blame", params?: string) => void;
 }
 
-const chipIconMap: Record<keyof typeof NOTES_CHIPS, LucideIcon> = {
+/** hash chip 三分类:prompt(AI)/ human / session,与 classifyNotesHash 返回值对齐。 */
+type ChipKind = "prompt" | "human" | "session";
+
+/** 各 chip 的图标(UI 常量,与文案分离;文案走 i18n notes.chips.*)。 */
+const chipIconMap: Record<ChipKind, LucideIcon> = {
   prompt: Bot,
   human: User,
   session: Activity,
 };
 
-const chipToneClass: Record<keyof typeof NOTES_CHIPS, string> = {
+/** 各 chip 的色调 class(UI 常量)。 */
+const chipToneClass: Record<ChipKind, string> = {
   prompt:
     "bg-primary/10 text-primary ring-ring dark:bg-primary/10 dark:text-primary dark:ring-ring",
   human:
@@ -128,10 +127,13 @@ function Header({
   onNavigate: NoteDetailProps["onNavigate"];
   log: NotesAuthorshipLog;
 }) {
+  const { t } = useTranslation();
   const copyJson = () => {
     void navigator.clipboard
       .writeText(JSON.stringify(log, null, 2))
-      .then(() => toast.success(NOTES_HEADER.copied, { description: MSG.noUploadNotice }))
+      .then(() =>
+        toast.success(t("notes.header.copied"), { description: t("common.noUploadNotice") }),
+      )
       .catch(() => toast.error("复制失败"));
   };
 
@@ -142,14 +144,14 @@ function Header({
           {meta.commit_sha}
         </code>
         <span className="text-xs text-slate-500">
-          {NOTES_HEADER.committed_at_label} {meta.committed_at}
+          {t("notes.header.committedAtLabel")} {meta.committed_at}
         </span>
         <button
           type="button"
           onClick={() => onNavigate("stats", meta.commit_sha)}
           className="ml-auto inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/15 dark:bg-primary/10 dark:text-primary dark:hover:bg-primary/20"
         >
-          {NOTES_HEADER.view_stats}
+          {t("notes.header.viewStats")}
         </button>
         <button
           type="button"
@@ -157,23 +159,28 @@ function Header({
           className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-border dark:text-slate-300 dark:hover:bg-slate-800"
         >
           <Copy className="h-3 w-3" />
-          {NOTES_HEADER.copy_full_json}
+          {t("notes.header.copyFullJson")}
         </button>
       </div>
       <div className="text-sm text-slate-800 dark:text-slate-200">{meta.subject}</div>
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
         <span>
-          {NOTES_HEADER.schema_version_label}:{" "}
+          {t("notes.header.schemaVersionLabel")}:{" "}
           <code className="font-mono">{metadata.schema_version}</code>
         </span>
         {metadata.git_ai_version && (
           <span>
-            {NOTES_HEADER.git_ai_version_label}:{" "}
+            {t("notes.header.gitAiVersionLabel")}:{" "}
             <code className="font-mono">{metadata.git_ai_version}</code>
           </span>
         )}
         <span className="text-slate-400">
-          {NOTES_HEADER.summary_template(filesCount, promptsCount, humansCount, sessionsCount)}
+          {t("notes.header.summaryTemplate", {
+            files: filesCount,
+            prompts: promptsCount,
+            humans: humansCount,
+            sessions: sessionsCount,
+          })}
         </span>
       </div>
     </div>
@@ -195,8 +202,9 @@ function AttestationsCard({
   isHead: boolean;
   onNavigate: NoteDetailProps["onNavigate"];
 }) {
+  const { t } = useTranslation();
   return (
-    <SectionCard title={NOTES_SECTION_TITLES.attestations} count={attestations.length}>
+    <SectionCard title={t("notes.sectionTitles.attestations")} count={attestations.length}>
       {attestations.length === 0 ? (
         <div className="px-3 py-2 text-xs text-slate-400">(空 attestation 段)</div>
       ) : (
@@ -228,13 +236,14 @@ function FileAttestationBlock({
   isHead: boolean;
   onNavigate: NoteDetailProps["onNavigate"];
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(true);
   const filePathBtn = isHead ? (
     <button
       type="button"
       onClick={() => onNavigate("blame", file.file_path)}
       className="inline-flex items-center gap-1 truncate font-mono text-xs text-primary hover:underline dark:text-primary"
-      title={NOTES_ACTIONS.open_blame_at_head}
+      title={t("notes.actions.openBlameAtHead")}
     >
       <FileText className="h-3 w-3 shrink-0" />
       <span className="truncate">{file.file_path}</span>
@@ -242,7 +251,7 @@ function FileAttestationBlock({
   ) : (
     <span
       className="inline-flex items-center gap-1 truncate font-mono text-xs text-foreground/80"
-      title={NOTES_ACTIONS.blame_disabled_non_head}
+      title={t("notes.actions.blameDisabledNonHead")}
     >
       <FileText className="h-3 w-3 shrink-0 text-slate-400" />
       <span className="truncate">{file.file_path}</span>
@@ -284,7 +293,7 @@ function FileAttestationBlock({
                   title={meta}
                 >
                   <Icon className="h-3 w-3" />
-                  {NOTES_CHIPS[kind].label}
+                  {t(`notes.chips.${kind}Label` as never)}
                 </span>
                 <code className="font-mono text-[11px] text-muted-foreground">{e.hash}</code>
                 {canJumpBlame ? (
@@ -296,7 +305,7 @@ function FileAttestationBlock({
                     title={
                       ranges.length > 1
                         ? `跳 Blame(${ranges.length} 段,深链取首段 L${firstRange[0]}-${firstRange[1]})`
-                        : NOTES_ACTIONS.open_blame_at_head
+                        : t("notes.actions.openBlameAtHead")
                     }
                     className="font-mono text-[11px] text-primary hover:underline dark:text-primary"
                   >
@@ -307,7 +316,7 @@ function FileAttestationBlock({
                     className="font-mono text-[11px] text-foreground/80"
                     title={
                       !isHead
-                        ? NOTES_ACTIONS.blame_disabled_non_head
+                        ? t("notes.actions.blameDisabledNonHead")
                         : ranges.length === 0
                           ? "line_ranges 字符串无法解析,Blame 跳转禁用"
                           : undefined
@@ -346,9 +355,10 @@ function chipMeta(hash: string, metadata: NotesAuthorshipMetadata): string {
 // ============================================================================
 
 function PromptsCard({ prompts }: { prompts: Record<string, NotesPromptRecord> }) {
+  const { t } = useTranslation();
   const entries = Object.entries(prompts);
   return (
-    <SectionCard title={NOTES_SECTION_TITLES.prompts} count={entries.length}>
+    <SectionCard title={t("notes.sectionTitles.prompts")} count={entries.length}>
       <ul className="space-y-2 px-3 pb-3">
         {entries.map(([hash, p]) => (
           <li key={hash}>
@@ -411,6 +421,7 @@ function Stat({ label, value }: { label: string; value: number }) {
 }
 
 function MessagesUrlRow({ url }: { url: string }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
       <ExternalLink className="h-3 w-3" />
@@ -424,7 +435,7 @@ function MessagesUrlRow({ url }: { url: string }) {
         className="ml-auto inline-flex items-center gap-1 rounded-sm border border-amber-300 px-1.5 py-0.5 text-[10px] font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-950/50"
       >
         <Copy className="h-3 w-3" />
-        {NOTES_ACTIONS.copy_messages_url}
+        {t("notes.actions.copyMessagesUrl")}
       </button>
     </div>
   );
@@ -451,9 +462,10 @@ function CustomAttributesTable({ attrs }: { attrs: Record<string, string> }) {
 }
 
 function MessagesBlock({ messages }: { messages: NotesMessage[] }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   if (!messages || messages.length === 0) {
-    return <div className="text-[11px] text-slate-400">{NOTES_MESSAGES.no_messages}</div>;
+    return <div className="text-[11px] text-slate-400">{t("notes.messages.noMessages")}</div>;
   }
   return (
     <div className="rounded-md border border-border">
@@ -466,12 +478,14 @@ function MessagesBlock({ messages }: { messages: NotesMessage[] }) {
         <Lock className="h-3 w-3 text-slate-400" />
         <span className="font-medium">messages</span>
         <span className="text-[10px] text-slate-400">({messages.length} 条)</span>
-        <span className="ml-auto text-[11px] text-slate-400">{NOTES_MESSAGES.collapsed_hint}</span>
+        <span className="ml-auto text-[11px] text-slate-400">
+          {t("notes.messages.collapsedHint")}
+        </span>
       </button>
       {open && (
         <div className="border-t border-slate-100 dark:border-border">
           <div className="border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-            {NOTES_MESSAGES.expanded_warn}
+            {t("common.noUploadNotice")}
           </div>
           <ul className="space-y-2 px-3 py-2">
             {messages.map((m, i) => (
@@ -487,8 +501,9 @@ function MessagesBlock({ messages }: { messages: NotesMessage[] }) {
 }
 
 function MessageItem({ message }: { message: NotesMessage }) {
+  const { t } = useTranslation();
   const type = typeof message.type === "string" ? message.type : "unknown";
-  const label = messageTypeLabel(type);
+  const label = messageTypeLabel(type, t);
   const tone = messageTypeTone(type);
   return (
     <div className="rounded-md border border-slate-200 p-2 dark:border-border">
@@ -524,14 +539,14 @@ function MessageItem({ message }: { message: NotesMessage }) {
   );
 }
 
-function messageTypeLabel(type: string): string {
+function messageTypeLabel(type: string, t: TFunction): string {
   switch (type) {
     case "user":
-      return NOTES_MESSAGES.type_user;
+      return t("notes.messages.typeUser");
     case "assistant":
-      return NOTES_MESSAGES.type_assistant;
+      return t("notes.messages.typeAssistant");
     case "tool_use":
-      return NOTES_MESSAGES.type_tool_use;
+      return t("notes.messages.typeToolUse");
     default:
       return type;
   }
@@ -555,9 +570,10 @@ function messageTypeTone(type: string): string {
 // ============================================================================
 
 function HumansCard({ humans }: { humans: Record<string, NotesHumanRecord> }) {
+  const { t } = useTranslation();
   const entries = Object.entries(humans);
   return (
-    <SectionCard title={NOTES_SECTION_TITLES.humans} count={entries.length}>
+    <SectionCard title={t("notes.sectionTitles.humans")} count={entries.length}>
       <ul className="space-y-1 px-3 pb-3">
         {entries.map(([hash, h]) => (
           <li
@@ -581,9 +597,10 @@ function HumansCard({ humans }: { humans: Record<string, NotesHumanRecord> }) {
 // ============================================================================
 
 function SessionsCard({ sessions }: { sessions: Record<string, NotesSessionRecord> }) {
+  const { t } = useTranslation();
   const entries = Object.entries(sessions);
   return (
-    <SectionCard title={NOTES_SECTION_TITLES.sessions} count={entries.length}>
+    <SectionCard title={t("notes.sectionTitles.sessions")} count={entries.length}>
       <ul className="space-y-2 px-3 pb-3">
         {entries.map(([hash, s]) => (
           <li key={hash} className="rounded-md border border-border">
@@ -637,7 +654,8 @@ function SectionCard({
   );
 }
 
-function ChipBadge({ kind }: { kind: keyof typeof NOTES_CHIPS }) {
+function ChipBadge({ kind }: { kind: ChipKind }) {
+  const { t } = useTranslation();
   const Icon = chipIconMap[kind];
   return (
     <span
@@ -647,7 +665,7 @@ function ChipBadge({ kind }: { kind: keyof typeof NOTES_CHIPS }) {
       )}
     >
       <Icon className="h-3 w-3" />
-      {NOTES_CHIPS[kind].label}
+      {t(`notes.chips.${kind}Label` as never)}
     </span>
   );
 }

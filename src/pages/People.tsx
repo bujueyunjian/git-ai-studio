@@ -24,23 +24,12 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { EmptyState } from "../components/EmptyState";
 import { TimeRangePicker } from "../components/TimeRangePicker";
 import { Card } from "../components/ui/CardPanel";
 import { Tooltip } from "../components/ui/TooltipBubble";
-import {
-  DASHBOARD_CACHE_HINT,
-  PEOPLE_DEGRADED,
-  PEOPLE_EMPTY_SEARCH,
-  PEOPLE_EMPTY_WINDOW,
-  PEOPLE_FAILED_HINT,
-  PEOPLE_METRIC_TITLES,
-  PEOPLE_PAGE,
-  PEOPLE_ROW_COMMITS,
-  PEOPLE_TABLE_HEADERS,
-  PEOPLE_TRUNCATED_HINT,
-} from "../lib/copy";
 import { currentRepo, getPeopleBreakdown } from "../lib/api";
 import { METRICS } from "../lib/formulas";
 import { formatInt, formatPercent } from "../lib/formulas";
@@ -54,10 +43,13 @@ import type {
 import { useRouter } from "../router";
 import { buildCsv, filterRows, sortRows, type SortDir, type SortField } from "./peopleTable";
 
-const STALE_TIME_MS = DASHBOARD_CACHE_HINT.stale_time_seconds * 1000;
+/** people 缓存过期时间(秒),对齐后端 SQLite 缓存策略。与 Dashboard 共用同一时长。 */
+const PEOPLE_STALE_TIME_SECONDS = 30;
+const STALE_TIME_MS = PEOPLE_STALE_TIME_SECONDS * 1000;
 const DEFAULT_RANGE: TimeRange = { kind: "last_n_days", days: 7 };
 
 export default function PeoplePage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const qc = useQueryClient();
   const [range, setRange] = useState<TimeRange>(DEFAULT_RANGE);
@@ -91,13 +83,13 @@ export default function PeoplePage() {
   // ===== degraded =====
   if (peopleQ.data?.status === "degraded") {
     const kind = peopleQ.data.reason.kind;
-    const copy = PEOPLE_DEGRADED[kind];
+    const seg = kind === "repo_missing" ? "repoMissing" : "gitAiMissing";
     return (
       <EmptyState
         Icon={kind === "repo_missing" ? FolderOpen : Activity}
-        title={copy.title}
-        description={copy.description}
-        ctaLabel={copy.cta}
+        title={t(`people.degraded.${seg}.title` as never)}
+        description={t(`people.degraded.${seg}.description` as never)}
+        ctaLabel={t(`people.degraded.${seg}.cta` as never)}
         onCta={() => router.navigate(kind === "repo_missing" ? "repo" : "install")}
       />
     );
@@ -213,15 +205,16 @@ function Header({
   onExportCsv: () => void;
   canExport: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold inline-flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            {PEOPLE_PAGE.title}
+            {t("people.page.title")}
           </h1>
-          <p className="mt-0.5 text-xs text-slate-500">{PEOPLE_PAGE.subtitle}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{t("people.page.subtitle")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <TimeRangePicker value={range} onChange={onChangeRange} />
@@ -231,8 +224,8 @@ function Header({
               type="search"
               value={query}
               onChange={(e) => onChangeQuery(e.target.value)}
-              placeholder={PEOPLE_PAGE.search_placeholder}
-              aria-label={PEOPLE_PAGE.search_placeholder}
+              placeholder={t("people.page.searchPlaceholder")}
+              aria-label={t("people.page.searchPlaceholder")}
               className="w-60 rounded-md border border-slate-200 bg-white py-1 pl-7 pr-2 text-xs shadow-xs dark:border-border dark:bg-card"
             />
           </div>
@@ -240,11 +233,11 @@ function Header({
             type="button"
             onClick={onRefresh}
             disabled={isFetching}
-            aria-label={PEOPLE_PAGE.refresh}
+            aria-label={t("people.page.refresh")}
             className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 shadow-xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:bg-card dark:text-slate-300"
           >
             <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
-            {isFetching ? PEOPLE_PAGE.refreshing : PEOPLE_PAGE.refresh}
+            {isFetching ? t("people.page.refreshing") : t("people.page.refresh")}
           </button>
           <button
             type="button"
@@ -253,11 +246,11 @@ function Header({
             className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 shadow-xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:bg-card dark:text-slate-300"
           >
             <Download className="h-3 w-3" />
-            {PEOPLE_PAGE.export_csv}
+            {t("people.page.exportCsv")}
           </button>
         </div>
       </div>
-      <div className="text-[11px] text-slate-400">{PEOPLE_PAGE.identity_hint}</div>
+      <div className="text-[11px] text-slate-400">{t("people.page.identityHint")}</div>
     </div>
   );
 }
@@ -265,30 +258,33 @@ function Header({
 // ============ CacheBar ============
 
 function CacheBar({ cacheHits, totalCommits }: { cacheHits: number; totalCommits: number }) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500 dark:border-border dark:bg-card/40">
-      <div>缓存 30s · 数据不上传</div>
+      <div>缓存 {PEOPLE_STALE_TIME_SECONDS}s · 数据不上传</div>
       <div className="font-mono text-slate-500">
-        {PEOPLE_PAGE.cached_template(cacheHits, totalCommits)}
+        {t("people.page.cachedTemplate", { hits: cacheHits, total: totalCommits })}
       </div>
     </div>
   );
 }
 
 function FailedBanner({ count }: { count: number }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-      <div>{PEOPLE_FAILED_HINT(count)}</div>
+      <div>{t("people.failedHintTemplate", { n: count })}</div>
     </div>
   );
 }
 
 function TruncatedBanner() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-      <div>{PEOPLE_TRUNCATED_HINT(500)}</div>
+      <div>{t("people.truncatedHintTemplate", { cap: 500 })}</div>
     </div>
   );
 }
@@ -296,16 +292,23 @@ function TruncatedBanner() {
 // ============ 4 总览卡 ============
 
 function OverviewCards({ total }: { total: PeopleBreakdownPayload["grand_total"] }) {
+  const { t } = useTranslation();
   const aiShare = total.total_additions > 0 ? total.ai_additions / total.total_additions : null;
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-      <MetricCard title={PEOPLE_METRIC_TITLES.total_commits} display={formatInt(total.commits)} />
       <MetricCard
-        title={PEOPLE_METRIC_TITLES.total_human}
+        title={t("people.metricTitles.totalCommits")}
+        display={formatInt(total.commits)}
+      />
+      <MetricCard
+        title={t("people.metricTitles.totalHuman")}
         display={formatInt(total.human_additions)}
       />
-      <MetricCard title={PEOPLE_METRIC_TITLES.total_ai} display={formatInt(total.ai_additions)} />
-      <MetricCard title={PEOPLE_METRIC_TITLES.overall_ai_rate} display={formatPercent(aiShare)} />
+      <MetricCard
+        title={t("people.metricTitles.totalAi")}
+        display={formatInt(total.ai_additions)}
+      />
+      <MetricCard title={t("people.metricTitles.overallAiRate")} display={formatPercent(aiShare)} />
     </div>
   );
 }
@@ -339,6 +342,7 @@ function PeopleTable({
   onToggleExpand: (key: string) => void;
   onJumpToStats: (sha: string) => void;
 }) {
+  const { t } = useTranslation();
   // PeopleTable:padding=none,把控制权交给内部表头/表格 —— Card 仅承担
   // rounded-xl + border + ring + overflow-hidden 的容器职责
   return (
@@ -350,35 +354,35 @@ function PeopleTable({
               <th className="w-7" aria-hidden />
               <SortHeader
                 field="author_name"
-                label={PEOPLE_TABLE_HEADERS.author_name}
+                label={t("people.tableHeaders.authorName")}
                 sort={sort}
                 onToggle={onToggleSort}
                 align="left"
               />
               <SortHeader
                 field="author_email"
-                label={PEOPLE_TABLE_HEADERS.author_email}
+                label={t("people.tableHeaders.authorEmail")}
                 sort={sort}
                 onToggle={onToggleSort}
                 align="left"
               />
               <SortHeader
                 field="commits"
-                label={PEOPLE_TABLE_HEADERS.commits}
+                label={t("people.tableHeaders.commits")}
                 sort={sort}
                 onToggle={onToggleSort}
                 align="right"
               />
               <SortHeader
                 field="human_additions"
-                label={PEOPLE_TABLE_HEADERS.human_additions}
+                label={t("people.tableHeaders.humanAdditions")}
                 sort={sort}
                 onToggle={onToggleSort}
                 align="right"
               />
               <SortHeader
                 field="unknown_additions"
-                label={PEOPLE_TABLE_HEADERS.unknown_additions}
+                label={t("people.tableHeaders.unknownAdditions")}
                 sort={sort}
                 onToggle={onToggleSort}
                 align="right"
@@ -386,21 +390,21 @@ function PeopleTable({
               />
               <SortHeader
                 field="ai_additions"
-                label={PEOPLE_TABLE_HEADERS.ai_additions}
+                label={t("people.tableHeaders.aiAdditions")}
                 sort={sort}
                 onToggle={onToggleSort}
                 align="right"
               />
               <SortHeader
                 field="total_additions"
-                label={PEOPLE_TABLE_HEADERS.total_additions}
+                label={t("people.tableHeaders.totalAdditions")}
                 sort={sort}
                 onToggle={onToggleSort}
                 align="right"
               />
               <SortHeader
                 field="ai_share"
-                label={PEOPLE_TABLE_HEADERS.ai_share}
+                label={t("people.tableHeaders.aiShare")}
                 sort={sort}
                 onToggle={onToggleSort}
                 align="right"
@@ -498,13 +502,14 @@ function RowCommitList({
   commits: PersonRow["commit_refs"];
   onJumpToStats: (sha: string) => void;
 }) {
+  const { t } = useTranslation();
   if (commits.length === 0) {
-    return <div className="text-[11px] text-slate-400">{PEOPLE_ROW_COMMITS.empty}</div>;
+    return <div className="text-[11px] text-slate-400">{t("people.rowCommits.empty")}</div>;
   }
   return (
     <div>
       <div className="mb-1 text-[11px] font-medium text-slate-500">
-        {PEOPLE_ROW_COMMITS.heading}
+        {t("people.rowCommits.heading")}
       </div>
       <ul className="max-h-56 space-y-1 overflow-y-auto pr-1 text-[11px]">
         {commits.map((c) => {
@@ -523,17 +528,17 @@ function RowCommitList({
                 </code>
                 {c.is_merge && (
                   <span className="rounded-sm bg-slate-200 px-1 text-[10px] dark:bg-slate-700">
-                    {PEOPLE_ROW_COMMITS.merge_chip}
+                    {t("people.rowCommits.mergeChip")}
                   </span>
                 )}
                 <span className="truncate flex-1">{c.subject}</span>
                 <span className="font-mono text-slate-400">
-                  {PEOPLE_ROW_COMMITS.ai_template(c.ai_additions)} ·{" "}
-                  {PEOPLE_ROW_COMMITS.human_template(c.human_additions)}
+                  {t("people.rowCommits.aiTemplate", { n: c.ai_additions })} ·{" "}
+                  {t("people.rowCommits.humanTemplate", { n: c.human_additions })}
                 </span>
                 {failed && !c.is_merge && (
                   <span className="rounded-sm bg-amber-100 px-1 text-[10px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                    {PEOPLE_ROW_COMMITS.failed_chip}
+                    {t("people.rowCommits.failedChip")}
                   </span>
                 )}
               </button>
@@ -588,19 +593,21 @@ function SortHeader({
 // ============ 空态 ============
 
 function EmptyWindowCard() {
+  const { t } = useTranslation();
   return (
     <Card padding="lg" className="border-dashed text-center">
-      <div className="font-medium text-foreground">{PEOPLE_EMPTY_WINDOW.title}</div>
-      <p className="mt-1 text-xs text-muted-foreground">{PEOPLE_EMPTY_WINDOW.description}</p>
+      <div className="font-medium text-foreground">{t("people.emptyWindow.title")}</div>
+      <p className="mt-1 text-xs text-muted-foreground">{t("people.emptyWindow.description")}</p>
     </Card>
   );
 }
 
 function EmptySearchCard() {
+  const { t } = useTranslation();
   return (
     <Card padding="lg" className="border-dashed text-center">
-      <div className="font-medium text-foreground">{PEOPLE_EMPTY_SEARCH.title}</div>
-      <p className="mt-1 text-xs text-muted-foreground">{PEOPLE_EMPTY_SEARCH.description}</p>
+      <div className="font-medium text-foreground">{t("people.emptySearch.title")}</div>
+      <p className="mt-1 text-xs text-muted-foreground">{t("people.emptySearch.description")}</p>
     </Card>
   );
 }

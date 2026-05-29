@@ -24,6 +24,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   BlameCodeView,
@@ -57,13 +58,6 @@ import {
 import { buildBlameUrlParams, parseBlameParams } from "../lib/blameUrl";
 import { detectTheme } from "../lib/chartColors";
 import { cn } from "../lib/cn";
-import {
-  BLAME_DEGRADED,
-  BLAME_LINE_LEGEND,
-  BLAME_POPOVER,
-  BLAME_REF_PICKER,
-  BLAME_TEXT,
-} from "../lib/copy";
 import type {
   BlameDegradedReason,
   BlamePayload,
@@ -92,6 +86,7 @@ const REF_SEARCH_THRESHOLD = 10;
 type BlameRef = string | null;
 
 export default function BlamePage() {
+  const { t } = useTranslation();
   const router = useRouter();
   const parsed = useMemo(() => parseBlameParams(router.params), [router.params]);
   const [theme, setTheme] = useState<"light" | "dark">(() => detectTheme());
@@ -188,13 +183,13 @@ export default function BlamePage() {
     }
     const m = /^(\d+)\s*,\s*(\d+)$/.exec(trimmed);
     if (!m) {
-      setLError(BLAME_TEXT.lrangeInvalid);
+      setLError(t("blame.lrange.invalid"));
       return;
     }
     const a = Number(m[1]);
     const b = Number(m[2]);
     if (a < 1 || b < a) {
-      setLError(BLAME_TEXT.lrangeInvalid);
+      setLError(t("blame.lrange.invalid"));
       return;
     }
     setLError(null);
@@ -205,9 +200,9 @@ export default function BlamePage() {
     return (
       <EmptyState
         Icon={FolderOpen}
-        title={BLAME_DEGRADED.repo_missing.title}
-        description={BLAME_DEGRADED.repo_missing.description}
-        ctaLabel={BLAME_DEGRADED.repo_missing.cta}
+        title={t("blame.degraded.repoMissing.title")}
+        description={t("blame.degraded.repoMissing.description")}
+        ctaLabel={t("blame.degraded.repoMissing.cta")}
         onCta={() => router.navigate("repo")}
       />
     );
@@ -293,6 +288,7 @@ function Header({
   selectedRef: BlameRef;
   onSelectRef: (r: BlameRef) => void;
 }) {
+  const { t } = useTranslation();
   const subline = selectedRef
     ? `基于 ${selectedRef} 的上游 blame-analysis 结果。`
     : "基于 HEAD 的上游 blame-analysis 结果。";
@@ -314,14 +310,14 @@ function Header({
               className="flex items-center gap-1"
             >
               <label htmlFor="lrange" className="text-xs font-medium text-muted-foreground">
-                {BLAME_TEXT.lrangeLabel}:
+                {t("blame.lrange.label")}:
               </label>
               <input
                 id="lrange"
                 type="text"
                 value={lInput}
                 onChange={(e) => setLInput(e.target.value)}
-                placeholder={BLAME_TEXT.lrangePlaceholder}
+                placeholder={t("blame.lrange.placeholder")}
                 spellCheck={false}
                 aria-invalid={lError !== null}
                 className="w-24 rounded-md border border-border bg-card px-2 py-1 font-mono text-xs text-foreground shadow-xs focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-ring"
@@ -360,6 +356,7 @@ function RefPicker({
   selectedRef: BlameRef;
   onSelectRef: (r: BlameRef) => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [shaInput, setShaInput] = useState("");
   const [shaError, setShaError] = useState<string | null>(null);
@@ -372,12 +369,12 @@ function RefPicker({
   });
 
   const branches = branchesQ.data?.status === "ok" ? branchesQ.data.branches : [];
-  const label = selectedRef ?? BLAME_REF_PICKER.current_head;
+  const label = selectedRef ?? t("blame.refPicker.currentHead");
 
   const submitSha = () => {
     const v = shaInput.trim();
     if (!v) {
-      setShaError(BLAME_REF_PICKER.sha_empty);
+      setShaError(t("blame.refPicker.shaEmpty"));
       return;
     }
     setShaError(null);
@@ -398,14 +395,14 @@ function RefPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          title={BLAME_REF_PICKER.trigger_title}
+          title={t("blame.refPicker.triggerTitle")}
           className={cn(
             "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs",
             "border-border bg-card text-foreground hover:bg-slate-50 dark:hover:bg-slate-800",
           )}
         >
           <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-muted-foreground">{BLAME_REF_PICKER.label}</span>
+          <span className="text-muted-foreground">{t("blame.refPicker.label")}</span>
           <span className="max-w-[160px] truncate font-mono">{label}</span>
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </button>
@@ -413,10 +410,10 @@ function RefPicker({
       <PopoverContent align="start" className="w-[320px] max-w-none p-0">
         <Command>
           {branches.length > REF_SEARCH_THRESHOLD && (
-            <CommandInput placeholder={BLAME_REF_PICKER.search_branches_placeholder} />
+            <CommandInput placeholder={t("blame.refPicker.searchBranchesPlaceholder")} />
           )}
           <CommandList>
-            <CommandEmpty>{BLAME_REF_PICKER.no_branches}</CommandEmpty>
+            <CommandEmpty>{t("blame.refPicker.noBranches")}</CommandEmpty>
             <CommandGroup>
               {/* 回到 HEAD:始终展示,等价 selectedRef = null。 */}
               <CommandItem
@@ -430,27 +427,27 @@ function RefPicker({
                   ) : (
                     <span className="h-3 w-3" aria-hidden="true" />
                   )}
-                  <span className="font-mono">{BLAME_REF_PICKER.current_head}</span>
+                  <span className="font-mono">{t("blame.refPicker.currentHead")}</span>
                 </span>
                 <span className="text-[10px] text-muted-foreground">
-                  {BLAME_REF_PICKER.reset_to_head}
+                  {t("blame.refPicker.resetToHead")}
                 </span>
               </CommandItem>
             </CommandGroup>
-            <CommandGroup heading={BLAME_REF_PICKER.branches_heading}>
+            <CommandGroup heading={t("blame.refPicker.branchesHeading")}>
               {branchesQ.isLoading && (
                 <div className="px-2 py-1 text-xs text-muted-foreground">
-                  {BLAME_REF_PICKER.branches_loading}
+                  {t("blame.refPicker.branchesLoading")}
                 </div>
               )}
               {branchesQ.isError && (
                 <div className="px-2 py-1 text-xs text-red-600 dark:text-red-400">
-                  {BLAME_REF_PICKER.branches_failed}
+                  {t("blame.refPicker.branchesFailed")}
                 </div>
               )}
               {!branchesQ.isLoading && !branchesQ.isError && branches.length === 0 && (
                 <div className="px-2 py-1 text-xs text-muted-foreground">
-                  {BLAME_REF_PICKER.no_branches}
+                  {t("blame.refPicker.noBranches")}
                 </div>
               )}
               {branches.map((b) => {
@@ -484,7 +481,7 @@ function RefPicker({
         </Command>
         <div className="border-t border-border p-2">
           <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            {BLAME_REF_PICKER.sha_input_heading}
+            {t("blame.refPicker.shaInputHeading")}
           </div>
           <form
             onSubmit={(e) => {
@@ -500,7 +497,7 @@ function RefPicker({
                 setShaInput(e.target.value);
                 setShaError(null);
               }}
-              placeholder={BLAME_REF_PICKER.sha_input_placeholder}
+              placeholder={t("blame.refPicker.shaInputPlaceholder")}
               spellCheck={false}
               aria-invalid={shaError !== null}
               className="flex-1 rounded-md border border-border bg-card px-2 py-1 font-mono text-xs text-foreground focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-ring"
@@ -509,7 +506,7 @@ function RefPicker({
               type="submit"
               className="rounded-md bg-primary px-2 py-1 text-xs font-medium text-white hover:bg-primary/90"
             >
-              {BLAME_REF_PICKER.sha_apply}
+              {t("blame.refPicker.shaApply")}
             </button>
           </form>
           {shaError && (
@@ -653,28 +650,32 @@ function FileView({
 }
 
 function NoAiAuthorshipBanner() {
-  const copy = BLAME_DEGRADED.no_ai_authorship;
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-2 border-b border-border bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:bg-card/40 dark:text-slate-300">
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <div>
-        <span className="font-medium">{copy.title}</span> — {copy.description}
-        <div className="mt-1 text-[10px] text-muted-foreground">{BLAME_POPOVER.merge_caveat}</div>
+        <span className="font-medium">{t("blame.degraded.noAiAuthorship.title")}</span> —{" "}
+        {t("blame.degraded.noAiAuthorship.description")}
+        <div className="mt-1 text-[10px] text-muted-foreground">
+          {t("blame.popover.mergeCaveat")}
+        </div>
       </div>
     </div>
   );
 }
 
 function Legend() {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3 border-t border-border px-3 py-1.5 text-[10px] text-muted-foreground">
       <span className="flex items-center gap-1">
         <span className="inline-block h-2 w-2 rounded-xs bg-primary/100" />
-        {BLAME_LINE_LEGEND.ai}
+        {t("blame.lineLegend.ai")}
       </span>
       <span className="flex items-center gap-1">
         <span className="inline-block h-2 w-2 rounded-xs border border-border bg-card" />
-        {BLAME_LINE_LEGEND.non_ai}
+        {t("blame.lineLegend.nonAi")}
       </span>
     </div>
   );
@@ -726,6 +727,7 @@ function PromptDetails({
   lineNumber: number;
   metadata: BlamePayload["metadata"];
 }) {
+  const { t } = useTranslation();
   const toolModel = `${record.agent_id.tool}::${record.agent_id.model}`;
   const moreFiles = record.other_files.length > 5;
   const shownFiles = moreFiles ? record.other_files.slice(0, 5) : record.other_files;
@@ -734,37 +736,37 @@ function PromptDetails({
     <div className="space-y-2 text-xs">
       <div>
         <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          {BLAME_POPOVER.prompt_heading} · 第 {lineNumber} 行
+          {t("blame.popover.promptHeading")} · 第 {lineNumber} 行
         </div>
         <div className="font-mono text-foreground">{toolModel}</div>
         {record.human_author && (
           <div className="mt-0.5 text-[11px] text-muted-foreground">
-            {BLAME_POPOVER.human_label}:{record.human_author}
+            {t("blame.popover.humanLabel")}:{record.human_author}
           </div>
         )}
         {!record.human_author && !metadata.is_logged_in && (
           <div className="mt-0.5 text-[11px] text-amber-600 dark:text-amber-300">
-            {BLAME_POPOVER.login_required}
+            {t("blame.popover.loginRequired")}
           </div>
         )}
       </div>
 
       <div className="rounded-sm border border-amber-200 bg-amber-50 p-2 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
         <div className="text-[10px] font-semibold uppercase tracking-wide">
-          {BLAME_POPOVER.scope_warning_repo_wide}
+          {t("blame.popover.scopeWarningRepoWide")}
         </div>
         <div className="mt-1 font-mono text-[11px]">
-          {BLAME_POPOVER.accepted(record.accepted_lines)} ·{" "}
-          {BLAME_POPOVER.overriden(record.overriden_lines)} ·{" "}
-          {BLAME_POPOVER.total_additions(record.total_additions)} ·{" "}
-          {BLAME_POPOVER.total_deletions(record.total_deletions)}
+          {t("blame.popover.acceptedTemplate", { n: record.accepted_lines })} ·{" "}
+          {t("blame.popover.overridenTemplate", { n: record.overriden_lines })} ·{" "}
+          {t("blame.popover.totalAdditionsTemplate", { n: record.total_additions })} ·{" "}
+          {t("blame.popover.totalDeletionsTemplate", { n: record.total_deletions })}
         </div>
       </div>
 
       {record.other_files.length > 0 && (
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {BLAME_POPOVER.other_files_heading}
+            {t("blame.popover.otherFilesHeading")}
           </div>
           <ul className="mt-0.5 space-y-0.5 font-mono text-[11px] text-muted-foreground">
             {shownFiles.map((f) => (
@@ -774,7 +776,7 @@ function PromptDetails({
             ))}
             {moreFiles && (
               <li className="text-[10px] text-muted-foreground" title={hiddenFiles.join("\n")}>
-                {BLAME_POPOVER.other_files_more(hiddenFiles.length)}
+                {t("blame.popover.otherFilesMoreTemplate", { n: hiddenFiles.length })}
               </li>
             )}
           </ul>
@@ -784,7 +786,7 @@ function PromptDetails({
       {record.commits.length > 0 && (
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {BLAME_POPOVER.commits_heading}
+            {t("blame.popover.commitsHeading")}
           </div>
           <div className="font-mono text-[11px] text-muted-foreground">
             {record.commits
@@ -797,14 +799,15 @@ function PromptDetails({
       )}
 
       <div className="space-y-1 border-t border-border pt-2 text-[10px] text-muted-foreground">
-        <div>{BLAME_POPOVER.drift_caveat}</div>
-        <div>{BLAME_POPOVER.merge_caveat}</div>
+        <div>{t("blame.popover.driftCaveat")}</div>
+        <div>{t("blame.popover.mergeCaveat")}</div>
       </div>
     </div>
   );
 }
 
 function FileDegraded({ reason }: { reason: BlameDegradedReason }) {
+  const { t } = useTranslation();
   const router = useRouter();
   let title = "无法显示文件";
   let description: React.ReactNode = "";
@@ -812,49 +815,50 @@ function FileDegraded({ reason }: { reason: BlameDegradedReason }) {
   let onCta: (() => void) | undefined;
   switch (reason.kind) {
     case "repo_missing": {
-      const c = BLAME_DEGRADED.repo_missing;
-      title = c.title;
-      description = c.description;
-      ctaLabel = c.cta;
+      title = t("blame.degraded.repoMissing.title");
+      description = t("blame.degraded.repoMissing.description");
+      ctaLabel = t("blame.degraded.repoMissing.cta");
       onCta = () => router.navigate("repo");
       break;
     }
     case "git_ai_missing": {
-      const c = BLAME_DEGRADED.git_ai_missing;
-      title = c.title;
-      description = c.description;
-      ctaLabel = c.cta;
+      title = t("blame.degraded.gitAiMissing.title");
+      description = t("blame.degraded.gitAiMissing.description");
+      ctaLabel = t("blame.degraded.gitAiMissing.cta");
       onCta = () => router.navigate("install");
       break;
     }
     case "no_head": {
-      title = BLAME_DEGRADED.no_head.title;
-      description = BLAME_DEGRADED.no_head.description;
+      title = t("blame.degraded.noHead.title");
+      description = t("blame.degraded.noHead.description");
       break;
     }
     case "commit_not_found": {
-      title = BLAME_DEGRADED.commit_not_found.title;
-      description = BLAME_DEGRADED.commit_not_found.description_template(reason.sha);
+      title = t("blame.degraded.commitNotFound.title");
+      description = t("blame.degraded.commitNotFound.descriptionTemplate", { sha: reason.sha });
       break;
     }
     case "file_not_in_head": {
-      title = BLAME_DEGRADED.file_not_in_head.title;
-      description = BLAME_DEGRADED.file_not_in_head.description_template(reason.file);
+      title = t("blame.degraded.fileNotInHead.title");
+      description = t("blame.degraded.fileNotInHead.descriptionTemplate", { file: reason.file });
       break;
     }
     case "file_too_large": {
-      title = BLAME_DEGRADED.file_too_large.title;
-      description = BLAME_DEGRADED.file_too_large.description_template(reason.size, reason.limit);
+      title = t("blame.degraded.fileTooLarge.title");
+      description = t("blame.degraded.fileTooLarge.descriptionTemplate", {
+        sizeKb: (reason.size / 1024).toFixed(1),
+        limitKb: (reason.limit / 1024).toFixed(0),
+      });
       break;
     }
     case "file_binary": {
-      title = BLAME_DEGRADED.file_binary.title;
-      description = BLAME_DEGRADED.file_binary.description;
+      title = t("blame.degraded.fileBinary.title");
+      description = t("blame.degraded.fileBinary.description");
       break;
     }
     case "ref_not_found": {
-      title = BLAME_REF_PICKER.ref_not_found_title;
-      description = BLAME_REF_PICKER.ref_not_found_template(reason.ref);
+      title = t("blame.refPicker.refNotFoundTitle");
+      description = t("blame.refPicker.refNotFoundTemplate", { r: reason.ref });
       break;
     }
   }

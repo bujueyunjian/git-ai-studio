@@ -7,8 +7,8 @@
 
 import { ChevronDown, ChevronRight, File as FileIcon, Folder } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
-import { BLAME_FILE_LIST_HINT, BLAME_TEXT } from "../lib/copy";
 import { buildTree, fuzzyMatch, type TreeNode } from "./BlameFileTree.helpers";
 
 export interface BlameFileTreeProps {
@@ -18,6 +18,7 @@ export interface BlameFileTreeProps {
 }
 
 export function BlameFileTree({ files, selected, onSelect }: BlameFileTreeProps) {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState("");
   const tree = useMemo(() => buildTree(files), [files]);
 
@@ -59,11 +60,13 @@ export function BlameFileTree({ files, selected, onSelect }: BlameFileTreeProps)
           type="text"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder={BLAME_TEXT.fileSearchPlaceholder}
+          placeholder={t("blame.fileSearchPlaceholder")}
           className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs shadow-xs focus:border-primary focus:outline-hidden focus:ring-1 focus:ring-ring dark:border-border dark:bg-card"
         />
         <div className="mt-1 text-[10px] text-slate-400">
-          {files.length === 0 ? BLAME_TEXT.fileListEmpty : BLAME_FILE_LIST_HINT(files.length)}
+          {files.length === 0
+            ? t("blame.fileListEmpty")
+            : t("blame.fileListHintTemplate", { n: files.length })}
         </div>
       </div>
       <div className="flex-1 overflow-y-auto px-1 pb-2">
@@ -83,7 +86,7 @@ export function BlameFileTree({ files, selected, onSelect }: BlameFileTreeProps)
           </ul>
         ) : (
           <div className="px-2 py-4 text-center text-xs text-slate-400">
-            {BLAME_TEXT.fileListEmpty}
+            {t("blame.fileListEmpty")}
           </div>
         )}
       </div>

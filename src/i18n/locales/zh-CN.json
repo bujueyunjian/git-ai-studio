@@ -7,7 +7,8 @@
     "winAdminHint": "请以管理员身份重新打开 git-ai-studio 或终端后重试。",
     "winCrlfHint": "仓库未声明 `* text=auto eol=lf`,Windows CRLF 可能让行归因偏移 1 行,建议在仓库根加入这一行。",
     "winPathSafeHint": "安装路径请避免空格与中文。若已通过 GIT_AI_HOME 指向了含空格 / 中文的目录,请改到纯英文短路径(例如 C:\\git-ai)后重新安装。",
-    "ccSwitchWarning": "使用 cc-switch 切换模型时,要保证 setting 里的 hook 还在 —— cc-switch 可能覆盖 ~/.claude/settings.json 的 hooks 段,需要每次切换后回到 Hooks 页确认。"
+    "ccSwitchWarning": "使用 cc-switch 切换模型时,要保证 setting 里的 hook 还在 —— cc-switch 可能覆盖 ~/.claude/settings.json 的 hooks 段,需要每次切换后回到 Hooks 页确认。",
+    "cancel": "取消"
   },
   "install": {
     "sideEffects": [
@@ -49,14 +50,22 @@
       "title": "git-ai daemon 僵尸 lock",
       "hint": "上次 daemon 进程异常退出但没释放 daemon.lock。所有 git-ai client 命令(包括 hook 触发的 checkpoint)都会被一直阻塞,报 \"daemon startup blocked: lock held at ...\"。",
       "stepLabel": "处置:删掉下面两个文件后重试 hook —— 下次 git-ai 命令会自动拉起一个新 daemon。",
-      "copyCmdLabel": "复制清理命令"
+      "copyCmdLabel": "复制清理命令",
+      "lastPidTemplate": "上次 daemon PID {{pid}}(已不存活)",
+      "copySuccess": "清理命令已复制"
     },
     "blockedLock": {
       "title": "git-ai daemon lock 仍被占用",
       "hint": "daemon.lock 仍被 git-ai.exe 持有,但 daemon.pid.json 缺失或不可用。此时直接删除 lock 会失败,所有 git-ai client 命令仍会报 \"daemon startup blocked: lock held at ...\"。",
       "stepLabel": "处置:先结束持锁的 git-ai.exe,再删除 daemon.lock / daemon.pid.json,最后重试 git-ai 命令。",
-      "copyCmdLabel": "复制排查命令"
-    }
+      "copyCmdLabel": "复制排查命令",
+      "lastPidUnavailableTemplate": "daemon.pid.json 记录的 PID {{pid}} 当前不可用,但 lock 仍被占用",
+      "candidatePidsTemplate": "当前发现 git-ai.exe PID {{pids}}",
+      "copySuccess": "排查命令已复制",
+      "noPidTitle": "未发现明确 git-ai.exe PID,请先手动结束持锁进程",
+      "confirmTitle": "确认后结束 git-ai.exe 并清理 lock/pid 文件"
+    },
+    "repairNow": "立即处理"
   },
   "stats": {
     "workingScopeHint": "注:这是「当前仓库」的未提交改动;Dashboard 的「本地未提交」卡统计的是你勾选的聚合集(可能不含本仓)。",
@@ -698,7 +707,9 @@
       "statusNotInstalled": "未安装",
       "fixThis": "修复此项",
       "fixThisTitleTemplate": "仅为 {{agent}} 触发 hook 修复",
-      "unknownPath": "(未知路径)"
+      "unknownPath": "(未知路径)",
+      "skipNotInstalled": "未安装,跳过",
+      "skipConfigured": "已配置,无需修改"
     },
     "checklist": {
       "title": "自动检查清单",
@@ -745,6 +756,78 @@
       "agentConfiguredDetail": "已配置",
       "agentConfiguredImpactErrTemplate": "{{agent}} 编辑的代码不会触发 checkpoint,该 agent 产出的所有 AI 行会归为 unknown",
       "agentConfiguredFixErr": "修复 hooks"
+    },
+    "pageTitle": "环境诊断",
+    "basedOnRepoLabel": "基于仓库:",
+    "noRepoSelected": "未选仓库(检查仅含全局项)",
+    "lastCheckedTemplate": "上次检测 {{time}} · 耗时 {{ms}}ms",
+    "copyAll": {
+      "tooltip": "把整份 git-ai debug report 原文复制到剪贴板,方便发给同事",
+      "success": "已复制 debug report 原文",
+      "label": "复制全部"
+    },
+    "refresh": {
+      "label": "重新检测",
+      "success": "已重新检测",
+      "error": "重新检测失败"
+    },
+    "daemonRepair": {
+      "selfHealed": {
+        "title": "daemon 已自动恢复正常,无需手动处理",
+        "runningDescTemplate": "当前 PID {{pid}} 正在运行,告警可能是 daemon 重启窗口期的瞬态状态。",
+        "idleDesc": "lock 已被清理,daemon 处于空闲态。"
+      },
+      "success": {
+        "title": "git-ai daemon lock 已处理",
+        "descTemplate": "结束 {{killed}} 个进程 / 清理 {{removed}} 个文件"
+      },
+      "notify": {
+        "successTitle": "git-ai daemon 处理成功",
+        "errorBodyTemplate": "{{health}}\\n错误: {{message}}"
+      },
+      "error": {
+        "title": "git-ai daemon 处理失败"
+      },
+      "format": {
+        "killedPidsTemplate": "结束 PID: {{pids}}",
+        "none": "无",
+        "removedPathsTemplate": "删除文件: {{paths}}",
+        "afterStateTemplate": "处理后状态: {{kind}}",
+        "beforeUnknown": "处理前状态: unknown",
+        "beforeIdle": "处理前状态: idle",
+        "beforeRunningTemplate": "处理前状态: running\\nPID: {{pid}}",
+        "beforeKindTemplate": "处理前状态: {{kind}}"
+      }
+    },
+    "officialFix": {
+      "successTemplate": "已为 {{n}} 个 agent 写入官方 hooks",
+      "error": "修复 hooks 失败",
+      "willDoTemplate": "{{agent}}:写入官方 hooks 到 {{path}}",
+      "defaultConfigPath": "默认配置路径"
+    },
+    "repairAgent": {
+      "successTemplate": "已为 {{agent}} 触发 hook 修复",
+      "errorTemplate": "修复 {{agent}} 失败"
+    },
+    "daemonRepairDialog": {
+      "title": "确认处理 git-ai daemon lock",
+      "description": "该操作会处理 git-ai daemon 的运行态 lock/pid 文件;如果 lock 仍被进程占用,会先结束确认框中列出的 git-ai 进程。",
+      "confirm": "确认处理"
+    },
+    "fixMissingDialog": {
+      "title": "修复缺失 hooks",
+      "description": "对所有已安装但未配置的 AI agent 一次性写入官方 git-ai hooks。",
+      "confirmLabel": "开始修复"
+    },
+    "daemonRepairConfirm": {
+      "willKill": "将结束进程",
+      "willDelete": "将删除文件",
+      "note": "完成后下次 git-ai client 命令会自动拉起新的 daemon。"
+    },
+    "gitAiNotFound": {
+      "title": "未检测到 git-ai",
+      "body": "检查过 GIT_AI_PATH 环境变量、~/.git-ai/bin 与系统 PATH,都没有找到。",
+      "goInstall": "前往安装"
     }
   },
   "logs": {

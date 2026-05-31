@@ -7,7 +7,8 @@
     "winAdminHint": "Reopen git-ai-studio or the terminal as Administrator, then try again.",
     "winCrlfHint": "This repository has no `* text=auto eol=lf` declaration. On Windows, CRLF can shift line authorship by 1 line; consider adding that line at the repository root.",
     "winPathSafeHint": "Avoid spaces and non-ASCII characters in the install path. If GIT_AI_HOME currently points to a directory with spaces or Chinese characters, switch it to a short pure-ASCII path (e.g. C:\\git-ai) and reinstall.",
-    "ccSwitchWarning": "When using cc-switch to switch models, make sure the hook in settings is still there — cc-switch may overwrite the hooks block in ~/.claude/settings.json, so confirm on the Hooks page after every switch."
+    "ccSwitchWarning": "When using cc-switch to switch models, make sure the hook in settings is still there — cc-switch may overwrite the hooks block in ~/.claude/settings.json, so confirm on the Hooks page after every switch.",
+    "cancel": "Cancel"
   },
   "install": {
     "sideEffects": [
@@ -49,14 +50,22 @@
       "title": "Stale git-ai daemon lock",
       "hint": "The previous daemon process exited abnormally without releasing daemon.lock. Every git-ai client command (including hook-triggered checkpoints) is now permanently blocked with \"daemon startup blocked: lock held at ...\".",
       "stepLabel": "Action: delete the two files below and retry the hook — the next git-ai command will spin up a fresh daemon automatically.",
-      "copyCmdLabel": "Copy cleanup command"
+      "copyCmdLabel": "Copy cleanup command",
+      "lastPidTemplate": "Last daemon PID {{pid}} (no longer alive)",
+      "copySuccess": "Cleanup command copied"
     },
     "blockedLock": {
       "title": "git-ai daemon lock is still held",
       "hint": "daemon.lock is still held by git-ai.exe, but daemon.pid.json is missing or unusable. Deleting the lock directly will fail and every git-ai client command will keep reporting \"daemon startup blocked: lock held at ...\".",
       "stepLabel": "Action: kill the git-ai.exe holding the lock first, then delete daemon.lock / daemon.pid.json, then retry your git-ai command.",
-      "copyCmdLabel": "Copy diagnostic commands"
-    }
+      "copyCmdLabel": "Copy diagnostic commands",
+      "lastPidUnavailableTemplate": "PID {{pid}} recorded in daemon.pid.json is currently unavailable, but the lock is still held",
+      "candidatePidsTemplate": "Currently found git-ai.exe PID {{pids}}",
+      "copySuccess": "Troubleshooting command copied",
+      "noPidTitle": "No definitive git-ai.exe PID found; please manually kill the lock-holding process first",
+      "confirmTitle": "On confirm, kill git-ai.exe and clean up the lock/pid files"
+    },
+    "repairNow": "Handle now"
   },
   "stats": {
     "workingScopeHint": "Note: this is the current repo's uncommitted changes; the Dashboard's \"Uncommitted\" card aggregates your selected repo set (which may not include this repo).",
@@ -698,7 +707,9 @@
       "statusNotInstalled": "Not installed",
       "fixThis": "Fix this",
       "fixThisTitleTemplate": "Trigger hook repair for {{agent}} only",
-      "unknownPath": "(unknown path)"
+      "unknownPath": "(unknown path)",
+      "skipNotInstalled": "Not installed, skipped",
+      "skipConfigured": "Already configured, no change needed"
     },
     "checklist": {
       "title": "Automatic checks",
@@ -745,6 +756,78 @@
       "agentConfiguredDetail": "Configured",
       "agentConfiguredImpactErrTemplate": "Code edited by {{agent}} will not trigger a checkpoint; all AI lines produced by it will be marked unknown",
       "agentConfiguredFixErr": "Fix hooks"
+    },
+    "pageTitle": "Environment Diagnostics",
+    "basedOnRepoLabel": "Repository:",
+    "noRepoSelected": "No repository selected (only global checks run)",
+    "lastCheckedTemplate": "Last checked {{time}} · took {{ms}}ms",
+    "copyAll": {
+      "tooltip": "Copy the full raw git-ai debug report to the clipboard for easy sharing",
+      "success": "Copied raw debug report",
+      "label": "Copy all"
+    },
+    "refresh": {
+      "label": "Re-check",
+      "success": "Re-checked",
+      "error": "Re-check failed"
+    },
+    "daemonRepair": {
+      "selfHealed": {
+        "title": "daemon recovered on its own; no manual action needed",
+        "runningDescTemplate": "PID {{pid}} is currently running; the alert was likely a transient state during a daemon restart window.",
+        "idleDesc": "The lock has been cleared; the daemon is now idle."
+      },
+      "success": {
+        "title": "git-ai daemon lock handled",
+        "descTemplate": "Killed {{killed}} process(es) / removed {{removed}} file(s)"
+      },
+      "notify": {
+        "successTitle": "git-ai daemon handled successfully",
+        "errorBodyTemplate": "{{health}}\\nError: {{message}}"
+      },
+      "error": {
+        "title": "git-ai daemon handling failed"
+      },
+      "format": {
+        "killedPidsTemplate": "Killed PIDs: {{pids}}",
+        "none": "none",
+        "removedPathsTemplate": "Removed files: {{paths}}",
+        "afterStateTemplate": "State after: {{kind}}",
+        "beforeUnknown": "State before: unknown",
+        "beforeIdle": "State before: idle",
+        "beforeRunningTemplate": "State before: running\\nPID: {{pid}}",
+        "beforeKindTemplate": "State before: {{kind}}"
+      }
+    },
+    "officialFix": {
+      "successTemplate": "Wrote official hooks for {{n}} agent(s)",
+      "error": "Failed to fix hooks",
+      "willDoTemplate": "{{agent}}: write official hooks to {{path}}",
+      "defaultConfigPath": "default config path"
+    },
+    "repairAgent": {
+      "successTemplate": "Triggered hook repair for {{agent}}",
+      "errorTemplate": "Failed to fix {{agent}}"
+    },
+    "daemonRepairDialog": {
+      "title": "Confirm handling the git-ai daemon lock",
+      "description": "This will handle the git-ai daemon's runtime lock/pid files. If the lock is still held by a process, the git-ai processes listed in this dialog will be killed first.",
+      "confirm": "Confirm"
+    },
+    "fixMissingDialog": {
+      "title": "Fix missing hooks",
+      "description": "Write the official git-ai hooks for all installed-but-unconfigured AI agents in one go.",
+      "confirmLabel": "Start fixing"
+    },
+    "daemonRepairConfirm": {
+      "willKill": "Will kill processes",
+      "willDelete": "Will delete files",
+      "note": "After this, the next git-ai client command will automatically spawn a new daemon."
+    },
+    "gitAiNotFound": {
+      "title": "git-ai not found",
+      "body": "Checked the GIT_AI_PATH environment variable, ~/.git-ai/bin, and the system PATH — none of them found it.",
+      "goInstall": "Go to install"
     }
   },
   "logs": {

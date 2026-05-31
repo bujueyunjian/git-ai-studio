@@ -98,21 +98,30 @@ function shouldPushDaemonRepairResult(settings: AppSettings | undefined): boolea
   return !!settings?.notifications?.daemon_unhealthy_alert;
 }
 
-function formatDaemonRepairResult(result: DaemonRepairResult): string {
+/** t 的宽松别名:模块级 helper 拼装 toast/通知文案时用,绕开 react-i18next 严格 key 类型 + 深实例化。 */
+type Translate = (key: string, opts?: Record<string, unknown>) => string;
+
+function formatDaemonRepairResult(result: DaemonRepairResult, tt: Translate): string {
+  const none = tt("diagnostic.daemonRepair.format.none");
   return [
-    formatDaemonHealthForAlert(result.before),
-    `结束 PID: ${result.killed_pids.length > 0 ? result.killed_pids.join(", ") : "无"}`,
-    `删除文件: ${result.removed_paths.length > 0 ? result.removed_paths.join(", ") : "无"}`,
-    `处理后状态: ${result.after.kind}`,
+    formatDaemonHealthForAlert(result.before, tt),
+    tt("diagnostic.daemonRepair.format.killedPidsTemplate", {
+      pids: result.killed_pids.length > 0 ? result.killed_pids.join(", ") : none,
+    }),
+    tt("diagnostic.daemonRepair.format.removedPathsTemplate", {
+      paths: result.removed_paths.length > 0 ? result.removed_paths.join(", ") : none,
+    }),
+    tt("diagnostic.daemonRepair.format.afterStateTemplate", { kind: result.after.kind }),
   ].join("\n");
 }
 
-function formatDaemonHealthForAlert(health: DaemonHealth | null): string {
-  if (!health) return "处理前状态: unknown";
-  if (health.kind === "idle") return "处理前状态: idle";
-  if (health.kind === "running") return `处理前状态: running\nPID: ${health.pid}`;
+function formatDaemonHealthForAlert(health: DaemonHealth | null, tt: Translate): string {
+  if (!health) return tt("diagnostic.daemonRepair.format.beforeUnknown");
+  if (health.kind === "idle") return tt("diagnostic.daemonRepair.format.beforeIdle");
+  if (health.kind === "running")
+    return tt("diagnostic.daemonRepair.format.beforeRunningTemplate", { pid: health.pid });
   const lines = [
-    `处理前状态: ${health.kind}`,
+    tt("diagnostic.daemonRepair.format.beforeKindTemplate", { kind: health.kind }),
     `lock: ${health.lock_path}`,
     `pid metadata: ${health.pid_meta_path}`,
     `last pid: ${health.last_pid ?? "unknown"}`,
@@ -130,7 +139,10 @@ function formatDaemonHealthForAlert(health: DaemonHealth | null): string {
  * 修复目标:detected && !configured(install_hooks_official 只对这一桶生效)。
  * 跳过桶:未安装 / 已配置,各自标明原因供 QuickFixDialog 展示。
  */
-function partitionAgentsForFix(agents: AgentHookStatus[]): {
+function partitionAgentsForFix(
+  agents: AgentHookStatus[],
+  tt: Translate,
+): {
   toFix: AgentHookStatus[];
   toSkip: QuickFixSkipEntry[];
 } {
@@ -139,9 +151,9 @@ function partitionAgentsForFix(agents: AgentHookStatus[]): {
   for (const a of agents) {
     const label = AGENT_LABEL[a.agent];
     if (!a.detected) {
-      toSkip.push({ item: label, reason: "未安装,跳过" });
+      toSkip.push({ item: label, reason: tt("diagnostic.agentHooks.skipNotInstalled") });
     } else if (a.configured) {
-      toSkip.push({ item: label, reason: "已配置,无需修改" });
+      toSkip.push({ item: label, reason: tt("diagnostic.agentHooks.skipConfigured") });
     } else {
       toFix.push(a);
     }
@@ -152,6 +164,7 @@ function partitionAgentsForFix(agents: AgentHookStatus[]): {
 /** embedded=true 时收进 Setup 容器的 tab,Setup 已提供页级标题,这里隐藏自带大标题避免重复。 */
 export default function DiagnosticPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation();
+  const tt = t as unknown as Translate;
   const { navigate } = useRouter();
   const qc = useQueryClient();
   const [fixOpen, setFixOpen] = useState(false);
@@ -199,9 +212,10 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
     },
     onSuccess: (data) => {
       qc.setQueryData(["diagnose_environment"], data);
-      toast.success("已重新检测");
+      toast.success(t("diagnostic.refresh.success"));
     },
-    onError: (e) => toast.error("重新检测失败", { description: (e as Error).message }),
+    onError: (e) =>
+      toast.error(t("diagnostic.refresh.error"), { description: (e as Error).message }),
   });
 
   const daemonRepairM = useMutation({
@@ -216,28 +230,39 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
         result.removed_paths.length === 0 &&
         (result.before.kind === "idle" || result.before.kind === "running");
       if (selfHealed) {
-        toast.info("daemon 已自动恢复正常,无需手动处理", {
+        toast.info(t("diagnostic.daemonRepair.selfHealed.title"), {
           description:
             result.before.kind === "running"
-              ? `当前 PID ${result.before.pid} 正在运行,告警可能是 daemon 重启窗口期的瞬态状态。`
-              : "lock 已被清理,daemon 处于空闲态。",
+              ? t("diagnostic.daemonRepair.selfHealed.runningDescTemplate", {
+                  pid: result.before.pid,
+                })
+              : t("diagnostic.daemonRepair.selfHealed.idleDesc"),
         });
         return;
       }
-      toast.success("git-ai daemon lock 已处理", {
-        description: `结束 ${result.killed_pids.length} 个进程 / 清理 ${result.removed_paths.length} 个文件`,
+      toast.success(t("diagnostic.daemonRepair.success.title"), {
+        description: t("diagnostic.daemonRepair.success.descTemplate", {
+          killed: result.killed_pids.length,
+          removed: result.removed_paths.length,
+        }),
       });
       if (shouldPushDaemonRepairResult(settingsQ.data)) {
-        void notify("git-ai daemon 处理成功", formatDaemonRepairResult(result));
+        void notify(
+          t("diagnostic.daemonRepair.notify.successTitle"),
+          formatDaemonRepairResult(result, tt),
+        );
       }
     },
     onError: (e) => {
       const message = (e as Error).message;
-      toast.error("git-ai daemon 处理失败", { description: message });
+      toast.error(t("diagnostic.daemonRepair.error.title"), { description: message });
       if (shouldPushDaemonRepairResult(settingsQ.data)) {
         void notify(
-          "git-ai daemon 处理失败",
-          `${formatDaemonHealthForAlert(daemonRepairTarget)}\n错误: ${message}`,
+          t("diagnostic.daemonRepair.error.title"),
+          t("diagnostic.daemonRepair.notify.errorBodyTemplate", {
+            health: formatDaemonHealthForAlert(daemonRepairTarget, tt),
+            message,
+          }),
         );
       }
     },
@@ -273,22 +298,23 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
   // installHooksOfficial 是幂等命令,Diagnostic 已持有 agents 数据,
   // 中间不需要让用户再去 Hooks 页点一次。
   const { toFix, toSkip } = useMemo(
-    () => (data ? partitionAgentsForFix(data.agents) : { toFix: [], toSkip: [] }),
-    [data],
+    () => (data ? partitionAgentsForFix(data.agents, tt) : { toFix: [], toSkip: [] }),
+    [data, tt],
   );
 
   const officialFixM = useMutation({
     mutationFn: () => installHooksOfficial(genJobId()),
     onSuccess: () => {
       setFixOpen(false);
-      toast.success(`已为 ${toFix.length} 个 agent 写入官方 hooks`);
+      toast.success(t("diagnostic.officialFix.successTemplate", { n: toFix.length }));
       toast.message(t("common.mustRestartAgent"));
       toast.message(t("common.mustReopenTerminal"));
       qc.invalidateQueries({ queryKey: ["diagnose_environment"] });
       qc.invalidateQueries({ queryKey: ["hooks_status"] });
       qc.invalidateQueries({ queryKey: ["claude_settings"] });
     },
-    onError: (e) => toast.error("修复 hooks 失败", { description: (e as Error).message }),
+    onError: (e) =>
+      toast.error(t("diagnostic.officialFix.error"), { description: (e as Error).message }),
   });
 
   /**
@@ -301,23 +327,28 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
   const repairAgentM = useMutation({
     mutationFn: (agent: AgentKind) => installHooksForAgent(genJobId(), agent),
     onSuccess: (_, agent) => {
-      toast.success(`已为 ${AGENT_LABEL[agent]} 触发 hook 修复`);
+      toast.success(t("diagnostic.repairAgent.successTemplate", { agent: AGENT_LABEL[agent] }));
       toast.message(t("common.mustRestartAgent"));
       qc.invalidateQueries({ queryKey: ["diagnose_environment"] });
       qc.invalidateQueries({ queryKey: ["hooks_status"] });
       qc.invalidateQueries({ queryKey: ["claude_settings"] });
     },
     onError: (e, agent) =>
-      toast.error(`修复 ${AGENT_LABEL[agent]} 失败`, { description: (e as Error).message }),
+      toast.error(t("diagnostic.repairAgent.errorTemplate", { agent: AGENT_LABEL[agent] }), {
+        description: (e as Error).message,
+      }),
   });
 
   const fixM = officialFixM;
   const willDo = useMemo(
     () =>
-      toFix.map(
-        (a) => `${AGENT_LABEL[a.agent]}:写入官方 hooks 到 ${a.config_path ?? "默认配置路径"}`,
+      toFix.map((a) =>
+        t("diagnostic.officialFix.willDoTemplate", {
+          agent: AGENT_LABEL[a.agent],
+          path: a.config_path ?? t("diagnostic.officialFix.defaultConfigPath"),
+        }),
       ),
-    [toFix],
+    [toFix, t],
   );
 
   // 健康总判定(健康优先重构):daemon 锁 / catalog 命中 / 检查清单 err|warn 任一存在即"需处理"。
@@ -339,29 +370,32 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
       {/* 顶部 */}
       <div className="flex items-center justify-between">
         <div className={embedded ? "text-xs text-muted-foreground" : undefined}>
-          {!embedded && <h1 className="text-xl font-semibold">环境诊断</h1>}
+          {!embedded && <h1 className="text-xl font-semibold">{t("diagnostic.pageTitle")}</h1>}
           <p className={cn(embedded ? "" : "mt-0.5", "text-xs text-muted-foreground")}>
-            基于仓库:
-            <span className="font-mono">{data?.repo?.path ?? "未选仓库(检查仅含全局项)"}</span>
+            {t("diagnostic.basedOnRepoLabel")}
+            <span className="font-mono">{data?.repo?.path ?? t("diagnostic.noRepoSelected")}</span>
             {data && (
               <>
-                {" · "}上次检测 {new Date(data.generated_at_unix_ms).toLocaleTimeString()} · 耗时{" "}
-                {data.took_ms}ms
+                {" · "}
+                {t("diagnostic.lastCheckedTemplate", {
+                  time: new Date(data.generated_at_unix_ms).toLocaleTimeString(),
+                  ms: data.took_ms,
+                })}
               </>
             )}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Tooltip content="把整份 git-ai debug report 原文复制到剪贴板,方便发给同事">
+          <Tooltip content={t("diagnostic.copyAll.tooltip")}>
             <button
               onClick={async () => {
                 await navigator.clipboard.writeText(data?.report.raw ?? "");
-                toast.success("已复制 debug report 原文");
+                toast.success(t("diagnostic.copyAll.success"));
               }}
               disabled={!data?.report.raw}
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs hover:bg-muted disabled:opacity-50 dark:border-border dark:bg-card dark:hover:bg-muted"
             >
-              <Copy className="h-3.5 w-3.5" /> 复制全部
+              <Copy className="h-3.5 w-3.5" /> {t("diagnostic.copyAll.label")}
             </button>
           </Tooltip>
           <button
@@ -377,7 +411,7 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
             )}
-            重新检测
+            {t("diagnostic.refresh.label")}
           </button>
         </div>
       </div>
@@ -640,8 +674,8 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
       <Dialog
         open={daemonRepairTarget !== null}
         onOpenChange={(v) => !daemonRepairM.isPending && !v && setDaemonRepairTarget(null)}
-        title="确认处理 git-ai daemon lock"
-        description="该操作会处理 git-ai daemon 的运行态 lock/pid 文件;如果 lock 仍被进程占用,会先结束确认框中列出的 git-ai 进程。"
+        title={t("diagnostic.daemonRepairDialog.title")}
+        description={t("diagnostic.daemonRepairDialog.description")}
         dismissible={!daemonRepairM.isPending}
         footer={
           <>
@@ -651,7 +685,7 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
               disabled={daemonRepairM.isPending}
               className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50 dark:border-border dark:hover:bg-muted"
             >
-              取消
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -660,7 +694,7 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
               className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
             >
               {daemonRepairM.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              确认处理
+              {t("diagnostic.daemonRepairDialog.confirm")}
             </button>
           </>
         }
@@ -671,11 +705,11 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
       <QuickFixDialog
         open={fixOpen}
         onOpenChange={setFixOpen}
-        title="修复缺失 hooks"
-        description="对所有已安装但未配置的 AI agent 一次性写入官方 git-ai hooks。"
+        title={t("diagnostic.fixMissingDialog.title")}
+        description={t("diagnostic.fixMissingDialog.description")}
         willDo={willDo}
         willSkip={toSkip}
-        confirmLabel="开始修复"
+        confirmLabel={t("diagnostic.fixMissingDialog.confirmLabel")}
         busy={fixM.isPending}
         onConfirm={() => fixM.mutate()}
       />
@@ -805,7 +839,7 @@ function DaemonStaleLockBanner({
           </p>
           {health.last_pid !== null && (
             <p className="mt-1 text-[11px] text-rose-700/70 dark:text-rose-300/70">
-              上次 daemon PID {health.last_pid}(已不存活)
+              {t("daemon.staleLock.lastPidTemplate", { pid: health.last_pid })}
             </p>
           )}
           <ul className="mt-2 space-y-0.5 font-mono text-[11px] text-rose-800 dark:text-rose-200">
@@ -820,7 +854,7 @@ function DaemonStaleLockBanner({
             <button
               onClick={async () => {
                 await navigator.clipboard.writeText(cmd);
-                toast.success("清理命令已复制");
+                toast.success(t("daemon.staleLock.copySuccess"));
               }}
               className="rounded-sm p-1 text-rose-600 hover:bg-rose-100 dark:text-rose-400 dark:hover:bg-rose-950/40"
               title={t("daemon.staleLock.copyCmdLabel")}
@@ -840,7 +874,7 @@ function DaemonStaleLockBanner({
               ) : (
                 <Wrench className="h-3.5 w-3.5" />
               )}
-              立即处理
+              {t("daemon.repairNow")}
             </button>
           </div>
         </div>
@@ -883,12 +917,14 @@ function DaemonBlockedLockBanner({
           </p>
           {health.last_pid !== null && (
             <p className="mt-1 text-[11px] text-amber-800/70 dark:text-amber-300/70">
-              daemon.pid.json 记录的 PID {health.last_pid} 当前不可用,但 lock 仍被占用
+              {t("daemon.blockedLock.lastPidUnavailableTemplate", { pid: health.last_pid })}
             </p>
           )}
           {health.candidate_pids.length > 0 && (
             <p className="mt-1 text-[11px] text-amber-800/70 dark:text-amber-300/70">
-              当前发现 git-ai.exe PID {health.candidate_pids.join(", ")}
+              {t("daemon.blockedLock.candidatePidsTemplate", {
+                pids: health.candidate_pids.join(", "),
+              })}
             </p>
           )}
           <ul className="mt-2 space-y-0.5 font-mono text-[11px] text-amber-900 dark:text-amber-200">
@@ -903,7 +939,7 @@ function DaemonBlockedLockBanner({
             <button
               onClick={async () => {
                 await navigator.clipboard.writeText(cmd);
-                toast.success("排查命令已复制");
+                toast.success(t("daemon.blockedLock.copySuccess"));
               }}
               className="rounded-sm p-1 text-amber-700 hover:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-950/40"
               title={t("daemon.blockedLock.copyCmdLabel")}
@@ -918,8 +954,8 @@ function DaemonBlockedLockBanner({
               disabled={busy || (health.last_pid === null && health.candidate_pids.length === 0)}
               title={
                 health.last_pid === null && health.candidate_pids.length === 0
-                  ? "未发现明确 git-ai.exe PID,请先手动结束持锁进程"
-                  : "确认后结束 git-ai.exe 并清理 lock/pid 文件"
+                  ? t("daemon.blockedLock.noPidTitle")
+                  : t("daemon.blockedLock.confirmTitle")
               }
               className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-amber-500 disabled:opacity-50"
             >
@@ -928,7 +964,7 @@ function DaemonBlockedLockBanner({
               ) : (
                 <Wrench className="h-3.5 w-3.5" />
               )}
-              立即处理
+              {t("daemon.repairNow")}
             </button>
           </div>
         </div>
@@ -942,6 +978,7 @@ function DaemonRepairConfirmBody({
 }: {
   health: Extract<DaemonHealth, { kind: "stale_lock" | "blocked_lock_unknown_pid" }>;
 }) {
+  const { t } = useTranslation();
   const pids =
     health.kind === "blocked_lock_unknown_pid"
       ? Array.from(
@@ -956,7 +993,7 @@ function DaemonRepairConfirmBody({
       {pids.length > 0 && (
         <div>
           <div className="mb-1 text-xs font-medium text-rose-600 dark:text-rose-400">
-            将结束进程
+            {t("diagnostic.daemonRepairConfirm.willKill")}
           </div>
           <ul className="space-y-0.5 font-mono text-xs">
             {pids.map((pid) => (
@@ -967,16 +1004,14 @@ function DaemonRepairConfirmBody({
       )}
       <div>
         <div className="mb-1 text-xs font-medium text-muted-foreground dark:text-neutral-300">
-          将删除文件
+          {t("diagnostic.daemonRepairConfirm.willDelete")}
         </div>
         <ul className="space-y-0.5 break-all font-mono text-xs">
           <li>{health.lock_path}</li>
           <li>{health.pid_meta_path}</li>
         </ul>
       </div>
-      <p className="text-xs text-muted-foreground">
-        完成后下次 git-ai client 命令会自动拉起新的 daemon。
-      </p>
+      <p className="text-xs text-muted-foreground">{t("diagnostic.daemonRepairConfirm.note")}</p>
     </div>
   );
 }
@@ -989,16 +1024,13 @@ function GitAiNotFoundEmpty({ onGoInstall }: { onGoInstall: () => void }) {
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/40">
           <Activity className="h-7 w-7" />
         </div>
-        <div className="mt-4 text-lg font-semibold">未检测到 git-ai</div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          检查过 <code className="font-mono">GIT_AI_PATH</code> 环境变量、
-          <code className="font-mono">~/.git-ai/bin</code> 与系统 PATH,都没有找到。
-        </p>
+        <div className="mt-4 text-lg font-semibold">{t("diagnostic.gitAiNotFound.title")}</div>
+        <p className="mt-2 text-sm text-muted-foreground">{t("diagnostic.gitAiNotFound.body")}</p>
         <button
           onClick={onGoInstall}
           className="mt-5 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
-          前往安装 <ArrowRight className="h-3.5 w-3.5" />
+          {t("diagnostic.gitAiNotFound.goInstall")} <ArrowRight className="h-3.5 w-3.5" />
         </button>
         <p className="mt-3 text-[11px] text-muted-foreground">{t("common.noUploadNotice")}</p>
       </div>

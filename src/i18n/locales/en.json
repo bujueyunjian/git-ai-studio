@@ -535,7 +535,7 @@
       "refresh": "Refresh now",
       "refreshing": "Refreshing…",
       "identityHint": "Identity key = lower-cased author_email; emails differing only in case are merged into the same row. git mailmap is not used.",
-      "cachedTemplate": "{{hits}} / {{total}} served from local SQLite cache"
+      "cachePolicy": "Parsed locally, uploaded nowhere; results cached for {{sec}}s."
     },
     "degraded": {
       "repoMissing": {

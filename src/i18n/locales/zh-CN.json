@@ -535,7 +535,7 @@
       "refresh": "立即刷新",
       "refreshing": "刷新中…",
       "identityHint": "身份键 = author_email 的小写形式;同邮箱大小写差异自动归为同一行。不引 git mailmap。",
-      "cachedTemplate": "{{hits}} / {{total}} 命中本地 SQLite 缓存"
+      "cachePolicy": "数字本地解析、不上传;结果缓存 {{sec}}s。"
     },
     "degraded": {
       "repoMissing": {

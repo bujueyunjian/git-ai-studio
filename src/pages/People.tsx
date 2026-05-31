@@ -28,6 +28,7 @@ import { EmptyState } from "../components/EmptyState";
 import { ScopeToggle } from "../components/ScopeToggle";
 import { TimeRangePicker } from "../components/TimeRangePicker";
 import { Card } from "../components/ui/CardPanel";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/PopoverPanel";
 import { Tooltip } from "../components/ui/TooltipBubble";
 import { currentGitUserEmail, currentRepo, getPeopleBreakdown } from "../lib/api";
 import { METRICS } from "../lib/formulas";
@@ -46,7 +47,7 @@ import { sortRows, sumRowsToTotals, type SortDir, type SortField } from "./peopl
 /** people 缓存过期时间(秒),对齐后端 SQLite 缓存策略。与 Dashboard 共用同一时长。 */
 const PEOPLE_STALE_TIME_SECONDS = 30;
 const STALE_TIME_MS = PEOPLE_STALE_TIME_SECONDS * 1000;
-const DEFAULT_RANGE: TimeRange = { kind: "last_n_days", days: 7 };
+const DEFAULT_RANGE: TimeRange = { kind: "this_week" };
 
 export default function PeoplePage() {
   const { t } = useTranslation();
@@ -170,8 +171,6 @@ export default function PeoplePage() {
         onRefresh={refresh}
       />
 
-      <CacheBar cacheHits={payload.cache_hits} totalCommits={overviewTotal.commits} />
-
       {payload.failed_shas.length > 0 && <FailedBanner count={payload.failed_shas.length} />}
       {payload.truncated && <TruncatedBanner />}
 
@@ -219,11 +218,32 @@ function Header({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold inline-flex items-center gap-2">
+          <h1 className="inline-flex items-center gap-2 text-xl font-semibold">
             <Users className="h-5 w-5 text-primary" />
             {t("people.page.title")}
+            {/* 口径 / 隐私 / 缓存秒数收进标题旁 ⓘ(点击弹出,同公式 ⓘ),header 只留标题。 */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`${t("people.page.title")} 说明`}
+                  aria-haspopup="dialog"
+                  className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80">
+                <div className="space-y-1.5 text-[12px] leading-relaxed">
+                  <div className="text-foreground">{t("people.page.subtitle")}</div>
+                  <div className="text-muted-foreground">{t("people.page.identityHint")}</div>
+                  <div className="text-muted-foreground">
+                    {t("people.page.cachePolicy", { sec: PEOPLE_STALE_TIME_SECONDS })}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">{t("people.page.subtitle")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ScopeToggle onlyMine={onlyMine} onChange={onChangeOnlyMine} />
@@ -239,21 +259,6 @@ function Header({
             {isFetching ? t("people.page.refreshing") : t("people.page.refresh")}
           </button>
         </div>
-      </div>
-      <div className="text-[11px] text-muted-foreground">{t("people.page.identityHint")}</div>
-    </div>
-  );
-}
-
-// ============ CacheBar ============
-
-function CacheBar({ cacheHits, totalCommits }: { cacheHits: number; totalCommits: number }) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted px-3 py-1.5 text-[11px] text-muted-foreground">
-      <div>缓存 {PEOPLE_STALE_TIME_SECONDS}s · 数据不上传</div>
-      <div className="font-mono text-muted-foreground">
-        {t("people.page.cachedTemplate", { hits: cacheHits, total: totalCommits })}
       </div>
     </div>
   );

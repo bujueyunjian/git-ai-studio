@@ -9,7 +9,6 @@ export type RouteId =
   | "dashboard"
   | "people"
   | "stats"
-  | "blame"
   | "notes"
   | "checkpoints"
   | "manual"
@@ -24,7 +23,6 @@ const ALL_ROUTES: RouteId[] = [
   "dashboard",
   "people",
   "stats",
-  "blame",
   "notes",
   "checkpoints",
   "manual",

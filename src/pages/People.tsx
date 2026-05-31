@@ -25,6 +25,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { EmptyState } from "../components/EmptyState";
+import { MetricCard } from "../components/MetricCard";
 import { ScopeToggle } from "../components/ScopeToggle";
 import { TimeRangePicker } from "../components/TimeRangePicker";
 import { Card } from "../components/ui/CardPanel";
@@ -311,32 +312,6 @@ function OverviewCards({ total }: { total: PeopleBreakdownPayload["grand_total"]
         tone="ai"
       />
     </div>
-  );
-}
-
-function MetricCard({
-  title,
-  display,
-  tone = "neutral",
-}: {
-  title: string;
-  display: string;
-  tone?: "ai" | "human" | "neutral";
-}) {
-  // 主数字 28px(font-bold),与 Stats 指标卡同档;Dashboard 用更大的 36px light 档(密度更低)。
-  // 左色条:人工=human 绿、AI/占比=ai 蓝、总提交=neutral 无条,与 Stats/Dashboard 语义统一。
-  return (
-    <Card
-      padding="sm"
-      interactive
-      tone={tone}
-      className="flex min-h-[100px] flex-col justify-between"
-    >
-      <div className="text-[11px] font-medium text-muted-foreground">{title}</div>
-      <div className="mt-1 font-mono text-[28px] font-bold leading-tight tabular-nums text-foreground">
-        {display}
-      </div>
-    </Card>
   );
 }
 

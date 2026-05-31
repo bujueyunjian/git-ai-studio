@@ -20,6 +20,7 @@ production precedents that informed the call.
 | 010 | [In-app auto-update](./0010-in-app-auto-update.md)                                              | **Accepted (supersedes 006)**                         | 2026-05-29 |
 | 011 | [Desktop companion (Ink pet)](./0011-desktop-companion-ink-pet.md)                              | **Accepted**                                          | 2026-05-29 |
 | 012 | [Cross-repo aggregation scope](./0012-cross-repo-aggregation-scope.md)                          | **Accepted**                                          | 2026-05-30 |
+| 013 | [Blame into Commit Attribution](./0013-blame-into-commit-attribution.md)                        | **Accepted**                                          | 2026-05-31 |
 
 ## Guiding principles
 

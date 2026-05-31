@@ -155,7 +155,7 @@ export default function NotesPage() {
               log={showQ.data.payload.log}
               meta={selectedMeta}
               headSha={payload.head_sha}
-              onNavigate={(route, params) => router.navigate(route, params)}
+              onNavigate={(route, params, query) => router.navigate(route, params, query)}
             />
           ) : (
             <CommitNoNote onViewStats={() => router.navigate("stats", selectedSha)} />

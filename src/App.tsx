@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
@@ -23,8 +23,6 @@ import LogsPage from "./pages/Logs";
 import DashboardPage from "./pages/Dashboard";
 import PeoplePage from "./pages/People";
 import StatsPage from "./pages/Stats";
-// Blame 页带 CodeMirror 6 + 8 lang 包 ≈ +500KB,懒加载避免污染首屏 bundle
-const BlamePage = lazy(() => import("./pages/Blame"));
 import NotesPage from "./pages/Notes";
 import CheckpointsPage from "./pages/Checkpoints";
 import ManualPage from "./pages/Manual";
@@ -153,8 +151,6 @@ function renderPage(r: ReturnType<typeof useRouter>["current"]) {
       return <PeoplePage />;
     case "stats":
       return <StatsPage />;
-    case "blame":
-      return <BlamePage />;
     case "notes":
       return <NotesPage />;
     case "checkpoints":

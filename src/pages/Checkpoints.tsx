@@ -131,7 +131,8 @@ export default function CheckpointsPage() {
     qc.invalidateQueries({ queryKey: ["commit_stats"] });
     qc.invalidateQueries({ queryKey: ["get_history"] });
   };
-  const onOpenBlame = (file: string) => router.navigate("blame", file);
+  // 逐行归因已并入提交归因(Stats):在 HEAD commit 下打开该文件的逐行弹窗(#/stats/<head>?file=)。
+  const onOpenBlame = (file: string) => router.navigate("stats", payload.head_sha, { file });
 
   const isRunning = runningQ.data != null;
 

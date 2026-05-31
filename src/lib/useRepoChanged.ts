@@ -14,17 +14,16 @@ import { useRouter } from "../router";
  *
  * # 副作用
  * 1. `invalidateRepoScopedQueries(qc)` —— 失效所有 HEAD 派生 query
- * 2. 当前路由在 blame / stats 时,把 URL params 清掉。否则旧路径(如 `#/blame/fileA/L1-2`)
- *    会被新仓库当成 deep-link 解析,落到 file_not_in_head degraded,用户以为文件存在但空。
- *    用户切到 Repo 页选完仓再点回 Blame —— Rail 的 navigate("blame") 会重新生成无 params 的
- *    hash,无问题;但用户**直接刷新 / 后退**到含 params 的 hash 时会复发。这里集中清掉。
+ * 2. 当前路由在 stats 时,把 URL params/query 清掉。否则旧深链(如 `#/stats/<sha>?file=fileA&L=1-2`)
+ *    会被新仓库当成 deep-link 解析,逐行弹窗落到 commit_not_found / file_not_in_head degraded。
+ *    清成无参 `#/stats`,回到默认选中 HEAD。
  */
 export function useRepoChanged(): () => void {
   const qc = useQueryClient();
   const { current, navigate } = useRouter();
   return useCallback(() => {
     invalidateRepoScopedQueries(qc);
-    if (current === "blame" || current === "stats") {
+    if (current === "stats") {
       navigate(current);
     }
   }, [qc, current, navigate]);

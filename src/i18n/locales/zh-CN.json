@@ -205,10 +205,6 @@
       "fileBinary": {
         "title": "Binary 文件",
         "description": "前 8000 字节内含 NUL,视作 binary 不渲染。"
-      },
-      "noAiAuthorship": {
-        "title": "本文件无 AI 归因行",
-        "description": "git-ai blame 在此文件没识别出任何 AI 行 — 可能是纯人写,或写入时 AI agent 没装 hook。"
       }
     },
     "popover": {
@@ -227,35 +223,9 @@
       "driftCaveat": "行内容来自最新 commit;prompt 是 AI 当时生成,**可能已被后续手工修改**,两者不必一致。",
       "mergeCaveat": "若某行 last-touched commit 是 merge,authorship 日志可能为空(spec v3.0.0 §2.2),前端会显示为灰色非 AI。"
     },
-    "lineLegend": {
-      "ai": "AI 归属行",
-      "nonAi": "非 AI 行(可能人类编辑、hook 未捕获或 notes 丢失)"
-    },
-    "title": "Blame 行级",
-    "loading": "加载中…",
-    "errorPrefix": "Blame 失败",
     "fileDegradedFallbackTitle": "无法显示文件",
     "lineDetail": {
       "close": "关闭归属面板"
-    },
-    "lrange": {
-      "label": "范围(-L)",
-      "placeholder": "如 15,25",
-      "apply": "应用",
-      "invalid": "格式无效。需 'start,end',start ≤ end,均 > 0。"
-    },
-    "commitNav": {
-      "subtitle": "选一个 commit,看它改了哪些文件 → 点文件看整文件逐行 AI 归因",
-      "searchPlaceholder": "搜索 message / sha…",
-      "heading": "提交历史",
-      "loading": "正在解析 git-ai stats…",
-      "truncated": "达上限 {{n}}",
-      "truncatedTitle": "已加载最近 {{n}} 个 commit,可能有更老的未纳入"
-    },
-    "instructions": {
-      "pickCommit": "从左侧选择一个 commit",
-      "pickFile": "选择左下方该 commit 的一个改动文件",
-      "body": "AI 写的行整行淡蓝高亮、行号染蓝;人写行无色块。点击任意 AI 行,右侧展开它的 prompt 摘要(哪个 agent / 模型、采纳 / 被改)。"
     },
     "refPicker": {
       "refNotFoundTitle": "Ref 未找到",
@@ -356,9 +326,11 @@
       "copyHash": "复制 hash",
       "copyPromptJson": "复制 prompt JSON",
       "copyMessagesUrl": "复制链接",
-      "openBlameAtHead": "在 Blame 中查看",
-      "blameDisabledNonHead": "Blame 当前只显示 HEAD commit(P6 限制);切换到 HEAD commit 的 notes 时可启用此链接。",
-      "blameDisabledDriftCaveat": "Blame 行号基于 HEAD,与历史 commit 行号可能漂移。"
+      "openBlameAtHead": "查看逐行归因",
+      "blameDisabledNonHead": "逐行归因当前仅对 HEAD commit 的 notes 开放;切到 HEAD commit 的 notes 时可用。",
+      "openLineAttrMultiRangeTemplate": "查看逐行归因({{n}} 段,深链取首段 L{{range}})",
+      "lineRangeUnparseable": "line_ranges 无法解析,逐行跳转已禁用",
+      "blameDisabledDriftCaveat": "逐行行号基于 HEAD,与历史 commit 行号可能漂移。"
     },
     "searchPlaceholder": "搜索 sha / subject…",
     "listEmpty": "未匹配任何 commit",
@@ -832,7 +804,6 @@
     "dashboard": "Dashboard",
     "commits": "提交归因",
     "people": "作者归因",
-    "blame": "Blame 行级",
     "notes": "git notes",
     "checkpoints": "Checkpoints",
     "diagnostic": "环境诊断",

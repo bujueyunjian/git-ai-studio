@@ -3,7 +3,7 @@
 // # IA
 // 顶部独立一个「仓库」入口(管理扫描根 / 多选聚合集 / 设当前下钻仓),它是所有分析的前置;
 // 其余功能项分三组显式呈现,不折叠、不藏:
-// - 「分析」:Dashboard / 提交归因 / 作者归因 / Blame 行级 / git notes / Checkpoints
+// - 「分析」:Dashboard / 提交归因(含文件逐行下钻)/ 作者归因 / git notes / Checkpoints
 // - 「配置」:环境诊断 / 安装升级 / Hooks 配置 / 日志
 // - 「帮助」:用户手册(纯文档,单列一组与功能页区隔)
 // TopBar 仍保留**当前下钻仓库**的快速切换器(与左侧「仓库」管理页职责分明):TopBar 是快速切焦点,
@@ -19,7 +19,6 @@ import {
   LayoutDashboard,
   BarChart3,
   Users,
-  GitBranch,
   FileJson,
   FolderGit2,
   ListTodo,
@@ -47,7 +46,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// 两组导航:label 中英规范 —— 能中文的中文(提交归因 / 作者归因 / Blame 行级 / 环境诊断 /
+// 两组导航:label 中英规范 —— 能中文的中文(提交归因 / 作者归因 / 环境诊断 /
 // 安装升级 / Hooks 配置),专有名词保留英文(Dashboard / git notes / Checkpoints)。
 const GROUPS: NavGroup[] = [
   {
@@ -56,7 +55,6 @@ const GROUPS: NavGroup[] = [
       { id: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
       { id: "stats", labelKey: "nav.commits", icon: BarChart3 },
       { id: "people", labelKey: "nav.people", icon: Users },
-      { id: "blame", labelKey: "nav.blame", icon: GitBranch },
       { id: "notes", labelKey: "nav.notes", icon: FileJson },
       { id: "checkpoints", labelKey: "nav.checkpoints", icon: ListTodo },
     ],

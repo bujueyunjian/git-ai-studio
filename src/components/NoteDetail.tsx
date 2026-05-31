@@ -39,9 +39,10 @@ export interface NoteDetailProps {
   log: NotesAuthorshipLog;
   /** commit 元数据(从 list 取),用于 header 显示 subject / committed_at / short。 */
   meta: NoteListEntry;
-  /** 当前仓库 HEAD sha;若与 meta.commit_sha 相等,Blame 跳转可用。 */
+  /** 当前仓库 HEAD sha;若与 meta.commit_sha 相等,逐行归因跳转可用(仅 HEAD 可看工作树后的最新行)。 */
   headSha: string | null;
-  onNavigate: (route: "stats" | "blame", params?: string) => void;
+  /** 跳转到提交归因(Stats):params=commit sha,query 可带 file/L 直达该文件逐行弹窗。 */
+  onNavigate: (route: "stats", params?: string, query?: Record<string, string>) => void;
 }
 
 /** hash chip 三分类:prompt(AI)/ human / session,与 classifyNotesHash 返回值对齐。 */
@@ -81,6 +82,7 @@ export function NoteDetail({ log, meta, headSha, onNavigate }: NoteDetailProps) 
           attestations={attestations}
           metadata={metadata}
           isHead={isHead}
+          commitSha={meta.commit_sha}
           onNavigate={onNavigate}
         />
       )}
@@ -169,11 +171,13 @@ function AttestationsCard({
   attestations,
   metadata,
   isHead,
+  commitSha,
   onNavigate,
 }: {
   attestations: NotesFileAttestation[];
   metadata: NotesAuthorshipMetadata;
   isHead: boolean;
+  commitSha: string;
   onNavigate: NoteDetailProps["onNavigate"];
 }) {
   const { t } = useTranslation();
@@ -186,6 +190,7 @@ function AttestationsCard({
               file={f}
               metadata={metadata}
               isHead={isHead}
+              commitSha={commitSha}
               onNavigate={onNavigate}
             />
           </li>
@@ -199,11 +204,13 @@ function FileAttestationBlock({
   file,
   metadata,
   isHead,
+  commitSha,
   onNavigate,
 }: {
   file: NotesFileAttestation;
   metadata: NotesAuthorshipMetadata;
   isHead: boolean;
+  commitSha: string;
   onNavigate: NoteDetailProps["onNavigate"];
 }) {
   const { t } = useTranslation();
@@ -211,7 +218,7 @@ function FileAttestationBlock({
   const filePathBtn = isHead ? (
     <button
       type="button"
-      onClick={() => onNavigate("blame", file.file_path)}
+      onClick={() => onNavigate("stats", commitSha, { file: file.file_path })}
       className="inline-flex items-center gap-1 truncate font-mono text-xs text-primary hover:underline dark:text-primary"
       title={t("notes.actions.openBlameAtHead")}
     >
@@ -270,11 +277,17 @@ function FileAttestationBlock({
                   <button
                     type="button"
                     onClick={() =>
-                      onNavigate("blame", `${file.file_path}/L${firstRange[0]}-${firstRange[1]}`)
+                      onNavigate("stats", commitSha, {
+                        file: file.file_path,
+                        L: `${firstRange[0]}-${firstRange[1]}`,
+                      })
                     }
                     title={
                       ranges.length > 1
-                        ? `跳 Blame(${ranges.length} 段,深链取首段 L${firstRange[0]}-${firstRange[1]})`
+                        ? t("notes.actions.openLineAttrMultiRangeTemplate", {
+                            n: ranges.length,
+                            range: `${firstRange[0]}-${firstRange[1]}`,
+                          })
                         : t("notes.actions.openBlameAtHead")
                     }
                     className="font-mono text-[11px] text-primary hover:underline dark:text-primary"
@@ -288,7 +301,7 @@ function FileAttestationBlock({
                       !isHead
                         ? t("notes.actions.blameDisabledNonHead")
                         : ranges.length === 0
-                          ? "line_ranges 字符串无法解析,Blame 跳转禁用"
+                          ? t("notes.actions.lineRangeUnparseable")
                           : undefined
                     }
                   >

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) and human contributo
 
 ## 项目定位
 
-`git-ai-studio` 是 Tauri v2 桌面应用(前端 React 19 + TypeScript,后端 Rust),作为**外部 `git-ai` CLI 的本地客户端**:环境诊断、git-ai 安装/升级、官方 hook 配置、本地 AI 代码归因可视化(Dashboard / Stats / People / Blame / Checkpoints / Notes)、应用与诊断日志(Logs:应用日志 + `git-ai debug` 诊断)。
+`git-ai-studio` 是 Tauri v2 桌面应用(前端 React 19 + TypeScript,后端 Rust),作为**外部 `git-ai` CLI 的本地客户端**:环境诊断、git-ai 安装/升级、官方 hook 配置、本地 AI 代码归因可视化(Dashboard / Stats〔提交归因,含文件逐行 blame 下钻弹窗,见 ADR-013〕/ People / Checkpoints / Notes)、应用与诊断日志(Logs:应用日志 + `git-ai debug` 诊断)。
 
 - **所有解析在本机完成,零数据上传,零 telemetry,零 crash reporter**;唯一的自动外网调用是启动约 1s 向 GitHub 查 `latest.json` 的版本检查(仅版本号,见 ADR-010,产品定位 lock 在 `docs/product/PR-FAQ.md`)
 - **三平台齐发**:macOS + Linux + Windows
@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) and human contributo
 ## 重要文档(动手前先扫一眼)
 
 - [`docs/product/PR-FAQ.md`](docs/product/PR-FAQ.md) —— 产品定位、FAQ、风险。任何砍/留决策的最终依据
-- [`docs/adr/`](docs/adr/) —— 11 个 ADR 锁定的架构决定(router 自研 / shadcn / Tailwind v4 / 不加 zod / CSS 动画 / updater 策略 / 三平台打包 / Conventional Commits / CI matrix / 应用内自更新 / 桌面宠物)
+- [`docs/adr/`](docs/adr/) —— 13 个 ADR 锁定的架构决定(router 自研 / shadcn / Tailwind v4 / 不加 zod / CSS 动画 / updater 策略 / 三平台打包 / Conventional Commits / CI matrix / 应用内自更新 / 桌面宠物 / 跨仓聚合口径 / 行级归因并入提交归因)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) —— 贡献流程 / commit 规范 / PR 模板
 - [`README.md`](README.md) / [`README.zh-CN.md`](README.zh-CN.md) —— 对外门面
 

@@ -38,8 +38,8 @@ export function reposKey(paths: string[]): string {
  *
  * # 谁应该被 invalidate
  * - **repo 元信息**:current_repo / recent_repos / list_branches
- * - **HEAD 派生数据**:blame / blame_files / read_file / commit_stats / commit_status /
- *   list_recent_commits / list_ai_notes / history
+ * - **HEAD 派生数据**:blame_at_commit / read_file_at_commit(Stats 逐行弹窗)/ commit_stats /
+ *   commit_status / recent_commits_with_stats / list_ai_notes / history
  * - **环境/诊断**:diagnose_environment / effective_ignore_patterns
  *
  * # 谁不应该被 invalidate
@@ -52,20 +52,19 @@ export function invalidateRepoScopedQueries(qc: QueryClient): void {
   // repo 元信息
   qc.invalidateQueries({ queryKey: ["current_repo"] });
   qc.invalidateQueries({ queryKey: ["current_git_user_email"] });
-  // Dashboard / Blame 用的独立 key,与 ["current_repo"] 名义重复但是两个 query 实例。
-  // 不刷它会让两页 repoPath 卡在旧值,所有依赖 repoPath 的子 query 都走错路径。
+  // People 页用的独立 key,与 ["current_repo"] 名义重复但是两个 query 实例。
+  // 不刷它会让该页 repoPath 卡在旧值,所有依赖 repoPath 的子 query 都走错路径。
   qc.invalidateQueries({ queryKey: ["current_repo_path"] });
   qc.invalidateQueries({ queryKey: ["recent_repos"] });
   qc.invalidateQueries({ queryKey: ["list_branches"] });
   // HEAD 派生数据
-  qc.invalidateQueries({ queryKey: ["blame"] });
-  qc.invalidateQueries({ queryKey: ["blame_files"] });
-  qc.invalidateQueries({ queryKey: ["read_file"] });
+  qc.invalidateQueries({ queryKey: ["blame_at_commit"] });
+  qc.invalidateQueries({ queryKey: ["read_file_at_commit"] });
   qc.invalidateQueries({ queryKey: ["commit_stats"] });
   // 未提交工作树摘要(WorkingDirSummary)走 commit_status;漏了它会导致切仓/分支后
   // "未提交 xx 行" 仍显示上一个仓库/分支的旧值(A1)。
   qc.invalidateQueries({ queryKey: ["commit_status"] });
-  qc.invalidateQueries({ queryKey: ["list_recent_commits"] });
+  qc.invalidateQueries({ queryKey: ["recent_commits_with_stats"] });
   qc.invalidateQueries({ queryKey: ["list_ai_notes"] });
   qc.invalidateQueries({ queryKey: ["history"] });
   qc.invalidateQueries({ queryKey: ["people"] });

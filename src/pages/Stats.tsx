@@ -29,16 +29,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import {
-  BlameCodeView,
-  type BlameLineAuthor,
-  type BlameLineClickEvent,
-} from "../components/BlameCodeView";
+import { BlameCodeView, type BlameLineClickEvent } from "../components/BlameCodeView";
 import { BlamePromptDetails } from "../components/BlamePromptDetails";
 import { ChangedFilesPanel } from "../components/ChangedFilesList";
 import { CommitAttributionList } from "../components/CommitAttributionList";
 import { EmptyState } from "../components/EmptyState";
+import { FileDegradedCard } from "../components/FileDegradedCard";
 import { FormulaPopover } from "../components/FormulaPopover";
+import { MetricCard } from "../components/MetricCard";
 import { ScopeToggle } from "../components/ScopeToggle";
 import { SplitPane } from "../components/Layout/SplitPane";
 import { StatsBar } from "../components/StatsBar";
@@ -53,12 +51,12 @@ import {
   listRecentCommitsWithStats,
   readFileAtRef,
 } from "../lib/api";
+import { deriveBlameLines, parseLRange } from "../lib/blameLines";
 import { detectTheme } from "../lib/chartColors";
 import { cn } from "../lib/cn";
 import { commitTotal, deriveRates, formatInt, formatPercent } from "../lib/formulas";
 import { useNotesUpdated } from "../lib/useNotesUpdated";
 import type {
-  BlamePayload,
   BlameResult,
   CommitWithStats,
   NoteKind,
@@ -103,10 +101,16 @@ export default function StatsPage() {
   const qc = useQueryClient();
   const [onlyMine, setOnlyMine] = useState(true); // 默认只看我(ADR-012:单开发者本机工具本分)
   const [query, setQuery] = useState("");
-  const [openFile, setOpenFile] = useState<{ sha: string; file: string } | null>(null);
   const [showSha, setShowSha] = useState<string | null>(null);
 
   const selectedSha = router.params || undefined;
+  // 逐行归因弹窗由 URL 驱动(单一真相、可深链、刷新保留 + Notes/Checkpoints 跳转入口):
+  // #/stats/<sha>?file=<路径>&L=<起>-<止>。点改动文件写入「当前展示 commit」的 sha + file(见 onOpenFile),
+  // 关弹窗清掉 query。注意写 sha 必须用展示中的 selected.sha,而非 URL 锚定的 selectedSha —— 无参进入(Rail)时
+  // params 为空,若不把 selected.sha 落到 params,渲染守卫 {openFile && selectedSha} 永远 false,点文件无反应。
+  const openFile = router.query.get("file");
+  const openRange = parseLRange(router.query.get("L"));
+  const closeOpenFile = () => router.navigate("stats", selectedSha);
   const isWorking = selectedSha === WORKING_DIR_SHA_TOKEN;
 
   const repoQ = useQuery({
@@ -287,7 +291,7 @@ export default function StatsPage() {
               <CommitDetail
                 commit={selected}
                 failed={failedShas.has(selected.sha)}
-                onOpenFile={(file) => setOpenFile({ sha: selected.sha, file })}
+                onOpenFile={(file) => router.navigate("stats", selected.sha, { file })}
                 onViewNotes={() => router.navigate("notes", selected.sha)}
                 onViewShow={() => setShowSha(selected.sha)}
               />
@@ -304,8 +308,8 @@ export default function StatsPage() {
         本机解析,不上传 · 缓存 {STATS_STALE_TIME_SECONDS}s · 每文件只显真实 AI 行数(不编造分母)
       </footer>
 
-      {openFile && (
-        <BlameDialog sha={openFile.sha} file={openFile.file} onClose={() => setOpenFile(null)} />
+      {openFile && selectedSha && (
+        <BlameDialog sha={selectedSha} file={openFile} range={openRange} onClose={closeOpenFile} />
       )}
       <ShowRawDialog sha={showSha} onClose={() => setShowSha(null)} />
     </div>
@@ -314,30 +318,17 @@ export default function StatsPage() {
 
 // ============ 指标看板 ============
 
+// 指标看板:与作者归因(People)同款卡片布局。AI 行 / 总行拆成两张独立卡,
+// 不再挤成 "X / Y" 单行(大数字会换行),每卡一个数字。
 function MetricsBar({ agg, count }: { agg: ReturnType<typeof aggregate>; count: number }) {
   return (
-    <div className="flex shrink-0 items-stretch gap-px border-b border-border bg-border">
-      <Metric label="AI 占比" value={formatPercent(agg.aiPct)} accent />
-      <Metric label="AI 行 / 总行" value={`${formatInt(agg.ai)} / ${formatInt(agg.total)}`} />
-      <Metric label="Commits" value={formatInt(count)} />
-      <Metric label="参与人" value={formatInt(agg.authors)} />
-    </div>
-  );
-}
-
-function Metric({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="flex flex-1 flex-col justify-center bg-background px-5 py-3.5">
-      <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      <div
-        className={cn(
-          "mt-1 font-mono text-3xl font-bold leading-tight tabular-nums",
-          accent ? "text-primary" : "text-foreground",
-        )}
-      >
-        {value}
+    <div className="shrink-0 border-b border-border p-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        <MetricCard title="AI 占比" display={formatPercent(agg.aiPct)} tone="ai" />
+        <MetricCard title="AI 行" display={formatInt(agg.ai)} tone="ai" />
+        <MetricCard title="总行" display={formatInt(agg.total)} />
+        <MetricCard title="Commits" display={formatInt(count)} />
+        <MetricCard title="参与人" display={formatInt(agg.authors)} />
       </div>
     </div>
   );
@@ -584,21 +575,17 @@ function RawDataLinks({
 
 // ============ 文件 → 逐行归因弹窗(复用 Blame 行级内核 + 停靠详情) ============
 
-function buildAiLines(payload: BlamePayload | null): Map<number, string> {
-  const m = new Map<number, string>();
-  if (!payload) return m;
-  for (const [key, promptId] of Object.entries(payload.lines)) {
-    const mr = /^(\d+)(?:-(\d+))?$/.exec(key);
-    if (!mr) continue;
-    const a = Number(mr[1]);
-    const b = mr[2] ? Number(mr[2]) : a;
-    if (a < 1 || b < a) continue;
-    for (let n = a; n <= b; n++) m.set(n, promptId);
-  }
-  return m;
-}
-
-function BlameDialog({ sha, file, onClose }: { sha: string; file: string; onClose: () => void }) {
+function BlameDialog({
+  sha,
+  file,
+  range,
+  onClose,
+}: {
+  sha: string;
+  file: string;
+  range: [number, number] | null;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const [full, setFull] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(() => detectTheme());
@@ -610,10 +597,11 @@ function BlameDialog({ sha, file, onClose }: { sha: string; file: string; onClos
     return () => ob.disconnect();
   }, []);
 
-  // ref = commit sha(getBlameAtRef 的 ref 接受任意 commit-ish),拿该文件在该 commit 的逐行归因。
+  // ref = commit sha(getBlameAtRef 的 ref 接受任意 commit-ish);range 来自深链 ?L=,
+  // 与原 Blame 页同口径:行范围传后端做范围查询(只标命中行)。
   const blameQ = useQuery<BlameResult>({
-    queryKey: ["blame_at_commit", sha, file],
-    queryFn: () => getBlameAtRef(sha, file, null),
+    queryKey: ["blame_at_commit", sha, file, range],
+    queryFn: () => getBlameAtRef(sha, file, range ? [[range[0], range[1]]] : null),
     staleTime: 30_000,
   });
   const fileQ = useQuery<ReadFileResult>({
@@ -623,42 +611,18 @@ function BlameDialog({ sha, file, onClose }: { sha: string; file: string; onClos
   });
 
   const blamePayload = blameQ.data?.status === "ok" ? blameQ.data.payload : null;
-  const aiLines = useMemo(() => buildAiLines(blamePayload), [blamePayload]);
-  // 每行作者/模型(可选作者列):AI 行标模型,人写行标 git 作者 —— 一眼看清"每行是人还是哪个模型"。
-  const lineAuthors = useMemo(() => {
-    const m = new Map<number, BlameLineAuthor>();
-    if (!blamePayload) return m;
-    for (const hunk of blamePayload.hunks) {
-      const [start, end] = hunk.range;
-      if (start < 1 || end < start) continue;
-      const dateLabel = hunk.author_time
-        ? new Date(hunk.author_time * 1000).toISOString().slice(0, 10)
-        : "—";
-      const baseTitle = `${hunk.original_author || "(unknown)"} · ${hunk.abbrev_sha || hunk.commit_sha.slice(0, 7)} · ${dateLabel}`;
-      for (let n = start; n <= end; n++) {
-        const pid = aiLines.get(n);
-        if (pid) {
-          const prompt = blamePayload.prompts[pid];
-          const tool = prompt?.agent_id.tool ?? "ai";
-          const model = prompt?.agent_id.model ?? tool;
-          m.set(n, { label: model, tone: "ai", title: prompt ? `AI: ${tool}::${model}` : "AI" });
-        } else {
-          const label = hunk.original_author || "(unknown)";
-          m.set(n, { label, tone: "human", title: baseTitle });
-        }
-      }
-    }
-    return m;
-  }, [blamePayload, aiLines]);
+  // 逐行渲染数据(AI 行索引 + 每行作者/模型)走共享纯派生,与原 Blame 页同一实现。
+  const { aiLines, lineAuthors } = useMemo(() => deriveBlameLines(blamePayload), [blamePayload]);
   const aiCount = aiLines.size;
   const record = activeClick ? (blamePayload?.prompts[activeClick.promptId] ?? null) : null;
 
   const fileText = fileQ.data?.status === "ok" ? fileQ.data.text : null;
-  const degraded =
+  // 硬故障:文件读取 / blame 任一 degraded → 逐一专用空态(响亮失败,不塌缩成一句泛化文案)。
+  const degradedReason =
     fileQ.data?.status === "degraded"
-      ? fileQ.data.reason.kind
+      ? fileQ.data.reason
       : blameQ.data?.status === "degraded"
-        ? blameQ.data.reason.kind
+        ? blameQ.data.reason
         : null;
 
   return (
@@ -696,10 +660,8 @@ function BlameDialog({ sha, file, onClose }: { sha: string; file: string; onClos
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             加载中…
           </div>
-        ) : degraded ? (
-          <div className="flex flex-1 items-center justify-center p-6 text-center text-xs text-muted-foreground">
-            无法显示该文件的逐行归因({degraded})。
-          </div>
+        ) : degradedReason ? (
+          <FileDegradedCard reason={degradedReason} />
         ) : fileText !== null ? (
           <>
             <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-border">

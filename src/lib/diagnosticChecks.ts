@@ -30,11 +30,6 @@ function isTruthy(v: string | undefined): boolean {
   return ["true", "yes", "y", "1", "in repository", "inside"].includes(v.trim().toLowerCase());
 }
 
-function isLoggedIn(v: string | undefined): boolean {
-  if (!v) return false;
-  return /^\s*logged\s*in\b/i.test(v.trim());
-}
-
 /** 把后端聚合 payload 翻译为人话级别的检查项清单。 */
 export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
   const items: CheckItem[] = [];
@@ -76,21 +71,10 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
     });
   }
 
-  // 3) 登录态
-  const login = entry(report, "Git AI Login", "Status");
-  if (login) {
-    const ok = isLoggedIn(login);
-    items.push({
-      id: "login",
-      label: t("diagnostic.check.loginLabel"),
-      level: ok ? "ok" : "warn",
-      detail: login,
-      impact: ok ? undefined : t("diagnostic.check.loginImpactNotLoggedIn"),
-      fix: ok ? undefined : { to: "settings", label: t("diagnostic.check.loginFix") },
-    });
-  }
+  // 登录态检查已移除:本项目定位单开发者本机、无账号无云(登录仅为远端聚合/部门看板),
+  // 本地归因不依赖登录,故"未登录"不应作为待处理项。需要登录指引时由 Settings 页承担。
 
-  // 4) 是否在 git 仓库内
+  // 是否在 git 仓库内
   const inRepo = entry(report, "Repository", "In repository");
   if (inRepo) {
     const ok = isTruthy(inRepo);
@@ -201,19 +185,4 @@ function agentHookItem(a: AgentHookStatus): CheckItem {
       ? undefined
       : { to: "hooks", label: t("diagnostic.check.agentConfiguredFixErr") },
   };
-}
-
-/** 顶部总览条用的 4 项摘要(粗粒度色块)。 */
-export function buildOverviewChips(items: CheckItem[]) {
-  const get = (id: string) => items.find((i) => i.id === id);
-  return [
-    { id: "git-ai-binary", label: t("diagnostic.overviewChips.gitAi"), item: get("git-ai-binary") },
-    { id: "login", label: t("diagnostic.overviewChips.login"), item: get("login") },
-    {
-      id: "any-agent-configured",
-      label: t("diagnostic.overviewChips.hooks"),
-      item: get("any-agent-configured"),
-    },
-    { id: "in-repo", label: t("diagnostic.overviewChips.repo"), item: get("in-repo") },
-  ];
 }

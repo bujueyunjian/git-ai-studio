@@ -651,9 +651,6 @@
       "gitAiVersionLabel": "git-ai version",
       "gitAiVersionImpactWarn": "This version is marked as having known issues. Local stats are unaffected, but remote aggregation (team dashboard) stats may be skewed.",
       "gitAiVersionFix": "Switch version",
-      "loginLabel": "git-ai login state",
-      "loginImpactNotLoggedIn": "Local authorship still works, but pushes to remote aggregation (team dashboard) may fail",
-      "loginFix": "See login guide",
       "inRepoLabel": "Inside a git repository",
       "inRepoImpactMissing": "When no repo is selected or the directory has no .git, no metric is computable",
       "inRepoFix": "Pick a repository",
@@ -678,12 +675,6 @@
       "agentConfiguredDetail": "Configured",
       "agentConfiguredImpactErrTemplate": "Code edited by {{agent}} will not trigger a checkpoint; all AI lines produced by it will be marked unknown",
       "agentConfiguredFixErr": "Fix hooks"
-    },
-    "overviewChips": {
-      "gitAi": "git-ai",
-      "login": "Login",
-      "hooks": "Hooks",
-      "repo": "Repo"
     }
   },
   "logs": {

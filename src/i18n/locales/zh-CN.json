@@ -651,9 +651,6 @@
       "gitAiVersionLabel": "git-ai 版本",
       "gitAiVersionImpactWarn": "该版本已被标记为有已知问题。本地 stats 不受影响,但远端聚合(部门看板)的统计数据可能失真。",
       "gitAiVersionFix": "更换版本",
-      "loginLabel": "git-ai 登录态",
-      "loginImpactNotLoggedIn": "本地归因仍可工作,但远端聚合(部门看板)的推送可能失败",
-      "loginFix": "查看登录指引",
       "inRepoLabel": "当前位于 git 仓库内",
       "inRepoImpactMissing": "未选仓库或所在目录无 .git 时,所有指标不可计算",
       "inRepoFix": "选择仓库",
@@ -678,12 +675,6 @@
       "agentConfiguredDetail": "已配置",
       "agentConfiguredImpactErrTemplate": "{{agent}} 编辑的代码不会触发 checkpoint,该 agent 产出的所有 AI 行会归为 unknown",
       "agentConfiguredFixErr": "修复 hooks"
-    },
-    "overviewChips": {
-      "gitAi": "git-ai",
-      "login": "Login",
-      "hooks": "Hooks",
-      "repo": "Repo"
     }
   },
   "logs": {

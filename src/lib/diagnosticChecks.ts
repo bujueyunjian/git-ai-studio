@@ -147,11 +147,13 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
   });
 
   // 8) 当前 HEAD 是否有 checkpoint
+  // 0 个 checkpoint 是正常空态(新 HEAD 还没 AI 编辑/保存),不是配置错误也无从修复 ——
+  // 故空时用 muted(中性信息)而非 warn,不污染"需要处理";有 checkpoint 时 ok。
   const wlc = repo?.working_logs_count ?? 0;
   items.push({
     id: "working-logs",
     label: t("diagnostic.check.workingLogsLabel"),
-    level: wlc > 0 ? "ok" : "warn",
+    level: wlc > 0 ? "ok" : "muted",
     detail: repo
       ? t("diagnostic.check.workingLogsDetailTemplate", { n: wlc })
       : t("diagnostic.check.workingLogsDetailNoRepo"),

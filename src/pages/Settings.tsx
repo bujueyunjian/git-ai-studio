@@ -4,6 +4,7 @@ import {
   Download,
   ExternalLink,
   Filter,
+  Info,
   Loader2,
   LogOut,
   Minimize2,
@@ -27,6 +28,7 @@ import { relaunchApp, type UpdateProgressEvent } from "../lib/updater";
 import { RadioGroup, RadioItem } from "../components/ui/RadioGroupBar";
 import { Switch } from "../components/ui/SwitchToggle";
 import { Dialog } from "../components/ui/DialogShell";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/PopoverPanel";
 import {
   exportAppSettings,
   currentGitUserEmail,
@@ -736,7 +738,32 @@ export default function SettingsPage() {
         <div className="space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{t("lowAiShare.settingsTitle")}</div>
+              <div className="flex items-center gap-1.5 text-sm font-medium">
+                {t("lowAiShare.settingsTitle")}
+                {/* 6 条触发规则收进点击 ⓘ(同 People「作者归因」),按需查看而非常驻占地。 */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`${t("lowAiShare.settingsTitle")} 触发规则`}
+                      aria-haspopup="dialog"
+                      className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-96">
+                    <div className="mb-1.5 text-xs font-medium text-foreground">
+                      {t("lowAiShare.rulesTitle")}
+                    </div>
+                    <ul className="list-disc space-y-1 pl-4 text-[12px] leading-relaxed text-muted-foreground">
+                      {(t("lowAiShare.rules", { returnObjects: true }) as string[]).map((rule) => (
+                        <li key={rule}>{rule}</li>
+                      ))}
+                    </ul>
+                  </PopoverContent>
+                </Popover>
+              </div>
               <p className="mt-0.5 text-xs text-slate-500">{t("lowAiShare.settingsHint")}</p>
             </div>
             <Switch
@@ -890,16 +917,6 @@ export default function SettingsPage() {
                     ["7 天", 10080],
                   ]}
                 />
-              </div>
-              <div className="rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-border dark:bg-slate-900/30 dark:text-slate-300">
-                <div className="mb-1.5 font-medium text-foreground">
-                  {t("lowAiShare.rulesTitle")}
-                </div>
-                <ul className="list-disc space-y-1 pl-4">
-                  {(t("lowAiShare.rules", { returnObjects: true }) as string[]).map((rule) => (
-                    <li key={rule}>{rule}</li>
-                  ))}
-                </ul>
               </div>
               <div className="flex flex-wrap justify-end gap-2">
                 <button

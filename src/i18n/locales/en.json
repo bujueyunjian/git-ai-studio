@@ -641,13 +641,8 @@
       "statusFail": "Fail",
       "statusNa": "N/A"
     },
-    "hero": {
-      "allGood": "All set",
-      "needAttentionTemplate": "{{n}} need attention"
-    },
-    "report": {
-      "title": "Detailed report",
-      "summaryTemplate": "{{n}} sections"
+    "attention": {
+      "headingTemplate": "Needs attention ({{n}})"
     },
     "check": {
       "gitAiBinaryLabel": "git-ai binary present",

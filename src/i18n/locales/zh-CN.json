@@ -641,13 +641,8 @@
       "statusFail": "失败",
       "statusNa": "不适用"
     },
-    "hero": {
-      "allGood": "一切就绪",
-      "needAttentionTemplate": "{{n}} 项待处理"
-    },
-    "report": {
-      "title": "详细报告",
-      "summaryTemplate": "{{n}} 段"
+    "attention": {
+      "headingTemplate": "需要处理({{n}})"
     },
     "check": {
       "gitAiBinaryLabel": "git-ai 二进制存在",

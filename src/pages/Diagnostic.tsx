@@ -3,7 +3,6 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
-  CheckCircle2,
   ChevronRight,
   Copy,
   Info,
@@ -34,7 +33,7 @@ import {
 } from "../lib/api";
 import { notify } from "../lib/osNotify";
 import { cn } from "../lib/cn";
-import { buildCheckList, buildOverviewChips } from "../lib/diagnosticChecks";
+import { buildCheckList } from "../lib/diagnosticChecks";
 
 // ===== daemon lock 清理命令生成（本地逻辑，与文案无关） =====
 
@@ -246,7 +245,6 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
 
   const data: DiagnosticOverview | undefined = q.data;
   const items = useMemo(() => (data ? buildCheckList(data) : []), [data]);
-  const chips = useMemo(() => buildOverviewChips(items), [items]);
 
   // 自动检查清单派生:异常(err/warn)置顶,统计通过数;全绿则默认折叠。
   const checklist = useMemo(() => {
@@ -328,7 +326,6 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
     daemonHealthQ.data?.kind === "stale_lock" ||
     daemonHealthQ.data?.kind === "blocked_lock_unknown_pid";
   const attentionCount = checklist.problems.length + catalogHits.length + (daemonProblem ? 1 : 0);
-  const healthy = attentionCount === 0;
   const configuredAgents = data ? data.agents.filter((a) => a.configured).length : 0;
   const totalAgents = data ? data.agents.length : 0;
 
@@ -385,35 +382,13 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
         </div>
       </div>
 
-      {/* 健康结论卡:一眼回答"配好了吗",吸收旧总览条的 4 色点摘要(不再单列一条,消除重复)。 */}
-      {data && (
-        <div
-          className={cn(
-            "flex items-center gap-4 rounded-lg border p-4",
-            healthy ? "border-border bg-success-muted/40" : "border-warning bg-warning-muted/40",
-          )}
-        >
-          {healthy ? (
-            <CheckCircle2 className="h-8 w-8 shrink-0 text-success" />
-          ) : (
-            <AlertTriangle className="h-8 w-8 shrink-0 text-warning-foreground dark:text-warning" />
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="text-base font-semibold text-foreground">
-              {healthy
-                ? t("diagnostic.hero.allGood")
-                : t("diagnostic.hero.needAttentionTemplate", { n: attentionCount })}
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
-              {chips.map((c) => (
-                <span key={c.id} className="flex items-center gap-1.5">
-                  <StatusDot level={(c.item?.level ?? "muted") as StatusLevel} size="sm" />
-                  <span className="text-xs text-muted-foreground">{c.label}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
+      {/* 需要处理:有问题(daemon 锁 / catalog 命中 / 检查清单 err|warn)时顶一个带计数的小标题;
+          健康时整块不显示(无标题、无横幅、无列表),页面回到平静。 */}
+      {data && attentionCount > 0 && (
+        <h2 className="flex items-center gap-2 text-sm font-semibold text-warning-foreground dark:text-warning">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {t("diagnostic.attention.headingTemplate", { n: attentionCount })}
+        </h2>
       )}
 
       {/* 僵尸 daemon lock 横幅:lock 文件还在但 PID 已死,所有 hook 命令会被一直阻塞。
@@ -653,50 +628,8 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
             </ul>
           </Collapsible>
 
-          {/* 详细报告抽屉:git-ai debug report 原始 6 段,默认折叠(排障才看)。 */}
-          <Collapsible
-            title={t("diagnostic.report.title")}
-            summary={t("diagnostic.report.summaryTemplate", { n: data.report.sections.length })}
-          >
-            <div className="space-y-2">
-              {data.report.sections.length === 0 && (
-                <div className="rounded-sm border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">
-                  没有解析到任何段(可能 git-ai 未装或 debug report 为空)
-                </div>
-              )}
-              {data.report.sections.map((s) => (
-                <Collapsible
-                  key={s.name}
-                  title={s.name}
-                  summary={`${s.entries.length} 项`}
-                  rightExtra={
-                    <button
-                      onClick={async () => {
-                        await navigator.clipboard.writeText(s.raw.trim());
-                        toast.success(`已复制 ${s.name} 段原文`);
-                      }}
-                      className="inline-flex items-center gap-1 rounded-sm p-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground dark:hover:bg-muted"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
-                  }
-                >
-                  <table className="w-full text-xs">
-                    <tbody>
-                      {s.entries.map(([k, v]) => (
-                        <tr key={k} className="align-top">
-                          <td className="w-1/3 py-1 pr-3 font-medium text-foreground/80">{k}</td>
-                          <td className="break-all py-1 font-mono text-muted-foreground">{v}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </Collapsible>
-              ))}
-            </div>
-          </Collapsible>
-
-          {/* 隐私基线一行常驻;"重启 agent / 重开终端"已在修复动作后 toast 提示,不长期占屏。 */}
+          {/* 隐私基线一行常驻;"重启 agent / 重开终端"已在修复动作后 toast 提示,不长期占屏。
+              详细报告(git-ai debug 原文)已移除;顶部「复制全部」仍可一键复制原文供排障/反馈。 */}
           <p className="py-2 text-center text-[11px] text-muted-foreground">
             {t("common.noUploadNotice")}
           </p>

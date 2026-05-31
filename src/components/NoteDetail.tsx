@@ -73,23 +73,17 @@ export function NoteDetail({ log, meta, headSha, onNavigate }: NoteDetailProps) 
 
   return (
     <div className="space-y-4 p-6">
-      <Header
-        meta={meta}
-        metadata={metadata}
-        promptsCount={promptsCount}
-        humansCount={humansCount}
-        sessionsCount={sessionsCount}
-        filesCount={attestations.length}
-        onNavigate={onNavigate}
-        log={log}
-      />
+      <Header meta={meta} metadata={metadata} onNavigate={onNavigate} log={log} />
 
-      <AttestationsCard
-        attestations={attestations}
-        metadata={metadata}
-        isHead={isHead}
-        onNavigate={onNavigate}
-      />
+      {/* 各段空集则整段隐藏(no-explain-absent),四段一致。 */}
+      {attestations.length > 0 && (
+        <AttestationsCard
+          attestations={attestations}
+          metadata={metadata}
+          isHead={isHead}
+          onNavigate={onNavigate}
+        />
+      )}
 
       {promptsCount > 0 && <PromptsCard prompts={metadata.prompts} />}
 
@@ -107,19 +101,11 @@ export function NoteDetail({ log, meta, headSha, onNavigate }: NoteDetailProps) 
 function Header({
   meta,
   metadata,
-  promptsCount,
-  humansCount,
-  sessionsCount,
-  filesCount,
   onNavigate,
   log,
 }: {
   meta: NoteListEntry;
   metadata: NotesAuthorshipMetadata;
-  promptsCount: number;
-  humansCount: number;
-  sessionsCount: number;
-  filesCount: number;
   onNavigate: NoteDetailProps["onNavigate"];
   log: NotesAuthorshipLog;
 }) {
@@ -170,14 +156,6 @@ function Header({
             <code className="font-mono">{metadata.git_ai_version}</code>
           </span>
         )}
-        <span className="text-slate-400">
-          {t("notes.header.summaryTemplate", {
-            files: filesCount,
-            prompts: promptsCount,
-            humans: humansCount,
-            sessions: sessionsCount,
-          })}
-        </span>
       </div>
     </div>
   );
@@ -201,22 +179,18 @@ function AttestationsCard({
   const { t } = useTranslation();
   return (
     <SectionCard title={t("notes.sectionTitles.attestations")} count={attestations.length}>
-      {attestations.length === 0 ? (
-        <div className="px-3 py-2 text-xs text-slate-400">(空 attestation 段)</div>
-      ) : (
-        <ul className="space-y-2 px-3 pb-3">
-          {attestations.map((f) => (
-            <li key={f.file_path}>
-              <FileAttestationBlock
-                file={f}
-                metadata={metadata}
-                isHead={isHead}
-                onNavigate={onNavigate}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="space-y-2 px-3 pb-3">
+        {attestations.map((f) => (
+          <li key={f.file_path}>
+            <FileAttestationBlock
+              file={f}
+              metadata={metadata}
+              isHead={isHead}
+              onNavigate={onNavigate}
+            />
+          </li>
+        ))}
+      </ul>
     </SectionCard>
   );
 }

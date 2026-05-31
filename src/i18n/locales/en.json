@@ -344,12 +344,18 @@
       "description": "git notes --ref=ai show <sha> failed. Either the commit never had a checkpoint, or the note was removed by git-ai rewrite-authorship.",
       "viewStats": "View Stats"
     },
+    "loading": {
+      "list": "Loading git notes…",
+      "parse": "Parsing authorship log…"
+    },
+    "error": {
+      "listFailed": "Failed to load list"
+    },
     "header": {
       "schemaVersionLabel": "schema",
       "gitAiVersionLabel": "git-ai",
       "baseCommitShaLabel": "base",
       "committedAtLabel": "Committed at",
-      "summaryTemplate": "{{files}} files · {{prompts}} prompts · {{humans}} humans · {{sessions}} sessions",
       "viewStats": "View Stats",
       "copyFullJson": "Copy full JSON",
       "copied": "Copied"

@@ -116,7 +116,7 @@ export default function NotesPage() {
     return (
       <div className="flex h-full items-center justify-center text-sm text-slate-500">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        正在读取 git notes --ref=ai…
+        {t("notes.loading.list")}
       </div>
     );
   }
@@ -124,7 +124,7 @@ export default function NotesPage() {
     return (
       <div className="p-6">
         <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300">
-          列表加载失败:{(listQ.error as Error).message}
+          {t("notes.error.listFailed")}:{(listQ.error as Error).message}
         </div>
       </div>
     );
@@ -146,7 +146,7 @@ export default function NotesPage() {
           ) : showQ.isLoading ? (
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              正在解析 authorship log…
+              {t("notes.loading.parse")}
             </div>
           ) : showQ.isError ? (
             <ParseFailed message={(showQ.error as Error).message} />

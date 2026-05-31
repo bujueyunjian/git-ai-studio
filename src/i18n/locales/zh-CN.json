@@ -344,12 +344,18 @@
       "description": "git notes --ref=ai show <sha> 失败。可能是该 commit 没打过 checkpoint,或 note 已被 git-ai rewrite-authorship 移除。",
       "viewStats": "查看 Stats"
     },
+    "loading": {
+      "list": "正在读取 git notes…",
+      "parse": "正在解析 authorship log…"
+    },
+    "error": {
+      "listFailed": "列表加载失败"
+    },
     "header": {
       "schemaVersionLabel": "schema",
       "gitAiVersionLabel": "git-ai",
       "baseCommitShaLabel": "base",
       "committedAtLabel": "提交于",
-      "summaryTemplate": "{{files}} 文件 · {{prompts}} prompt · {{humans}} 人类 · {{sessions}} session",
       "viewStats": "查看 Stats",
       "copyFullJson": "复制完整 JSON",
       "copied": "已复制"

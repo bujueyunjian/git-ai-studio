@@ -129,6 +129,13 @@ pub struct AppSettings {
     /// 桌面宠物(Ink pet)配置。默认关(opt-in)。详见 ADR-011。
     #[serde(default)]
     pub pet: PetConfig,
+    /// 显式勾选"纳入跨仓聚合"的仓库绝对路径集合(已 canonicalize)。
+    /// Dashboard / 历史趋势 / 作者归因 的唯一聚合数据源(M1)。
+    /// 与 `recent_repos`(下钻 MRU,cap 5)、`current_repo`(单仓下钻焦点)**正交**:
+    /// `set_aggregate_repos` 绝不触碰 current_repo / recent_repos,反之亦然。
+    /// 空集合 = 合法的"尚未勾选"态(聚合命令返回 NoReposSelected 空态,而非错误)。
+    #[serde(default)]
+    pub aggregate_repos: Vec<String>,
     // ====== 已废弃 / 迁移用字段 ======
     /// **已废弃**:历史顶层位置;`load()` 会把它迁到 `notifications.cc_switch_auto_repair`。
     /// 用 `skip_serializing_if` 让迁移完成后下一次 save 不再写出。
@@ -407,5 +414,20 @@ mod tests {
         assert_eq!(parsed.pet.position, Some((100, 200)));
         assert_eq!(parsed.pet.size.as_deref(), Some("large"));
         assert_eq!(parsed.pet.alert_interval_sec, Some(60));
+    }
+
+    #[test]
+    fn aggregate_repos_defaults_empty_and_round_trips() {
+        // 旧 config 缺该字段 → 空集合(向后兼容,无需迁移代码)。
+        let s: AppSettings = serde_json::from_str(r#"{"recent_repos":[]}"#).unwrap();
+        assert!(s.aggregate_repos.is_empty(), "缺字段应反序列化为空 Vec");
+
+        let s = AppSettings {
+            aggregate_repos: vec!["/a/repo1".to_string(), "/b/repo2".to_string()],
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        let parsed: AppSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.aggregate_repos, vec!["/a/repo1", "/b/repo2"]);
     }
 }

@@ -3,12 +3,15 @@ import { cn } from "../lib/cn";
 
 type Tone = "neutral" | "success" | "warn" | "danger" | "info";
 
+// tone 走 T1 语义 token(bg-{tone}-muted 软底 + text-{tone} 实色),删硬编码双 variant,
+// 一处改全站 badge 明暗一致。注:warn 的 text-warning(琥珀)在浅底上偏淡,故 warn 用 -foreground
+// 深色文字(near-black on 琥珀软底)保证可读 —— 琥珀做"文字色"天生不可读,这是该色系的固有约束。
 const TONES: Record<Tone, string> = {
   neutral: "bg-muted text-muted-foreground",
-  success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-  warn: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
-  danger: "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300",
-  info: "bg-primary/10 text-primary",
+  success: "bg-success-muted text-success",
+  warn: "bg-warning-muted text-warning-foreground dark:text-warning",
+  danger: "bg-danger-muted text-danger",
+  info: "bg-info-muted text-info",
 };
 
 export function Badge({

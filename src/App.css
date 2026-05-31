@@ -108,6 +108,25 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  /* 数据 / 状态 / 卡片层级语义色(T1)。亮暗值在 :root / .dark 双写。 */
+  --color-ai: var(--ai);
+  --color-ai-foreground: var(--ai-foreground);
+  --color-ai-muted: var(--ai-muted);
+  --color-human: var(--human);
+  --color-human-foreground: var(--human-foreground);
+  --color-human-muted: var(--human-muted);
+  --color-unknown: var(--unknown);
+  --color-success: var(--success);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-muted: var(--warning-muted);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-danger-muted: var(--danger-muted);
+  --color-info: var(--info);
+  --color-info-muted: var(--info-muted);
+  --color-card-elevated: var(--card-elevated);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -151,6 +170,29 @@
   --sidebar-accent-foreground: hsl(240 5.9% 10%);
   --sidebar-border: hsl(240 5.9% 90%);
   --sidebar-ring: hsl(210 100% 56%);
+  /* 语义数据色 + 状态色 + 卡片层级(T1)。
+   * 信息层:AI=科技蓝 / 人工=翡翠绿 / 未归因=灰;状态:成功=绿(比人工深一档以区分)、
+   * 警告=琥珀、危险=玫红、信息=蓝(走 --primary,azure 色相与 AI 的 indigo 不同,不混)。
+   * 软底统一用 rgba/hsla 旧式语法(WebView2 兼容,不用 color-mix)。
+   * Recharts/CodeMirror/canvas 的 hex 副本在 lib/chartColors.ts,须与此处 --ai/--human/--unknown 同步。 */
+  --ai: #3b82f6;
+  --ai-foreground: #ffffff;
+  --ai-muted: rgba(59, 130, 246, 0.12);
+  --human: #10b981;
+  --human-foreground: #ffffff;
+  --human-muted: rgba(16, 185, 129, 0.12);
+  --unknown: #94a3b8;
+  --success: #059669;
+  --success-muted: rgba(5, 150, 105, 0.12);
+  --warning: #f59e0b;
+  --warning-foreground: #1a1a1a;
+  --warning-muted: rgba(245, 158, 11, 0.12);
+  --danger: #e11d48;
+  --danger-foreground: #ffffff;
+  --danger-muted: rgba(225, 29, 72, 0.12);
+  --info: var(--primary);
+  --info-muted: hsla(210, 100%, 56%, 0.12);
+  --card-elevated: hsl(240 5% 97%);
   color-scheme: light dark;
 }
 
@@ -187,5 +229,24 @@
   --sidebar-accent-foreground: hsl(0 0% 98%);
   --sidebar-border: hsl(240 5% 24%);
   --sidebar-ring: hsl(210 100% 54%);
+  /* 语义色暗色档(T1),对齐 :root 语义,提亮以保暗色下可读。 */
+  --ai: #60a5fa;
+  --ai-foreground: #ffffff;
+  --ai-muted: rgba(96, 165, 250, 0.2);
+  --human: #34d399;
+  --human-foreground: #0a0a0a;
+  --human-muted: rgba(52, 211, 153, 0.2);
+  --unknown: #cbd5e1;
+  --success: #10b981;
+  --success-muted: rgba(16, 185, 129, 0.2);
+  --warning: #fbbf24;
+  --warning-foreground: #1a1a1a;
+  --warning-muted: rgba(251, 191, 36, 0.2);
+  --danger: #fb7185;
+  --danger-foreground: #1a1a1a;
+  --danger-muted: rgba(251, 113, 133, 0.2);
+  --info: var(--primary);
+  --info-muted: hsla(210, 100%, 54%, 0.2);
+  --card-elevated: hsl(240 5% 20%);
   color-scheme: dark;
 }

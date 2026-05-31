@@ -27,14 +27,7 @@ export interface DebugReport {
   raw: string;
 }
 
-export interface ShimStatus {
-  resolved_paths: string[];
-  first_is_shim: boolean;
-  expected_shim: string;
-  ok: boolean;
-}
-
-export type AgentKind = "Claude" | "Cursor" | "Codex" | "OpenCode";
+export type AgentKind = "Claude" | "Cursor" | "Codex" | "OpenCode" | "Gemini" | "Pi";
 
 /** git-ai daemon 健康态。后端 [`DaemonHealth`] 用 `#[serde(tag="kind", rename_all="snake_case")]`,
  *  这里的 kind 取值与之严格对齐;`stale_lock` 才需要用户介入处置。 */
@@ -83,7 +76,6 @@ export interface DiagnosticOverview {
   took_ms: number;
   repo: RepoEntry | null;
   report: DebugReport;
-  shim: ShimStatus;
   agents: AgentHookStatus[];
   degraded: DegradeReason | null;
 }
@@ -210,8 +202,18 @@ export interface AppSettings {
   repo_setup_seen: boolean;
   /** 桌面宠物配置(opt-in,默认关)。详见 ADR-011。 */
   pet: PetConfig;
+  /** 显式勾选纳入跨仓聚合的仓库路径集合(M1)。与 recent_repos / current_repo 正交。 */
+  aggregate_repos: string[];
   /** **已废弃**:历史顶层位置,后端 load 时迁移到 notifications.cc_switch_auto_repair。 */
   cc_switch_auto_repair?: boolean | null;
+}
+
+/** get_aggregate_repos 的返回项:聚合集合里一个仓库 + 其当前有效性。
+ *  对齐 src-tauri/src/commands/repo.rs::AggregateRepoEntry。失效仓 valid=false / entry=null。 */
+export interface AggregateRepoEntry {
+  path: string;
+  valid: boolean;
+  entry: RepoEntry | null;
 }
 
 /** 桌面宠物配置。对齐 src-tauri/src/state.rs::PetConfig。 */
@@ -441,6 +443,109 @@ export type HistoryDegradedKind = "repo_missing" | "git_ai_missing";
 export type HistoryResult =
   | { status: "ok"; payload: HistoryPayload }
   | { status: "degraded"; reason: { kind: HistoryDegradedKind } };
+
+// ===== 提交归因 commit 浏览器(Stats 页)。镜像 history.rs 的 CommitWithStats / RecentCommits*。=====
+// 与 HistoryPayload 正交:这是"最近 N 个 commit 各自的元信息 + AI 三桶"的扁平列表,供 Stats 页
+// commit 列表 + 详情渲染;复用与 get_history 同一份缓存。
+
+export interface CommitWithStats {
+  sha: string;
+  short: string;
+  /** ISO-8601 with TZ。 */
+  authored_at: string;
+  author_name: string;
+  author_email: string;
+  subject: string;
+  is_merge: boolean;
+  stats: AiStats;
+  /** 提示性 note(merge / 空新增 / 缺 hook),后端复用 derive_note_kind 单一口径。 */
+  note_kind: NoteKind | null;
+}
+
+export interface RecentCommitsPayload {
+  commits: CommitWithStats[];
+  /** git-ai stats 子进程失败的 commit:在 commits 里以 0 桶占位,UI 显式提示,绝不当真实数据。 */
+  failed_shas: string[];
+  /** list_recent 取到刚好 max_count 条 ⇒ 可能有更老 commit 未纳入,UI 显式提示。 */
+  truncated: boolean;
+  cache_hits: number;
+  took_ms: number;
+}
+
+export type RecentCommitsResult =
+  | { status: "ok"; payload: RecentCommitsPayload }
+  | { status: "degraded"; reason: { kind: HistoryDegradedKind } };
+
+// ===== 跨仓聚合历史(M2)。镜像 src-tauri/src/commands/history.rs 的 Aggregate* 类型。 =====
+// 与单仓 HistoryPayload 正交:Dashboard 默认跨仓走这套,LowAiShare 等单仓消费者仍用 HistoryPayload。
+
+/** 跨仓 per-commit:带 repo_path 以支持跨仓识别与下钻。 */
+export interface AggregatePerCommit {
+  repo_path: string;
+  sha: string;
+  short: string;
+  authored_at: string;
+  is_merge: boolean;
+  stats: AiStats;
+}
+
+/** 整仓采集失败:其数据未并入聚合,UI 必须显式列出"未纳入统计",绝不当 0。 */
+export interface FailedRepo {
+  repo_path: string;
+  reason: string;
+}
+
+/** 单 commit 采集失败(带 repo_path 限定,跨仓 sha 不全局唯一)。 */
+export interface FailedCommit {
+  repo_path: string;
+  sha: string;
+}
+
+export interface AggregateHistoryPayload {
+  range: TimeRange;
+  range_start_unix_ms: number;
+  range_end_unix_ms: number;
+  total_commits_in_window: number;
+  per_commit: AggregatePerCommit[];
+  daily_buckets: DailyBucket[];
+  cache_hits: number;
+  /** 采集失败的仓(数据未并入聚合,UI 显式提示)。 */
+  failed_repos: FailedRepo[];
+  /** 单 commit 采集失败(0 桶占位,UI 显式提示)。 */
+  failed_shas: FailedCommit[];
+  /** 命中 500 cap 的仓(可能有更老 commit 未计入)。 */
+  truncated_repos: string[];
+  took_ms: number;
+}
+
+export type AggregateHistoryDegradedKind = "no_repos_selected" | "git_ai_missing";
+
+export type AggregateHistoryResult =
+  | { status: "ok"; payload: AggregateHistoryPayload }
+  | { status: "degraded"; reason: { kind: AggregateHistoryDegradedKind } };
+
+/** 单仓未提交切片(三桶);仅含有改动的仓。 */
+export interface WorkingRepoSlice {
+  repo_path: string;
+  human_additions: number;
+  unknown_additions: number;
+  ai_additions: number;
+}
+
+/** 跨仓「本地未提交」聚合(`git ai status` 求和)。与时间窗口正交、不缓存、天然只看我。 */
+export interface AggregateWorkingStatusPayload {
+  repos_with_changes: number;
+  human_additions: number;
+  unknown_additions: number;
+  ai_additions: number;
+  per_repo: WorkingRepoSlice[];
+  failed_repos: FailedRepo[];
+  took_ms: number;
+}
+
+export type AggregateWorkingStatusResult =
+  | { status: "ok"; payload: AggregateWorkingStatusPayload }
+  | { status: "degraded"; reason: { kind: AggregateHistoryDegradedKind } };
 
 /**
  * `get_range_summary` 的返回。镜像 src-tauri/src/commands/history.rs::RangeSummaryResult。
@@ -675,29 +780,15 @@ export interface NotesAgentId {
   model: string;
 }
 
-/**
- * `messages` 数组的单条。spec §1.2.4:
- * - `type` 取 "user" | "assistant" | "tool_use"
- * - `text` 在 user/assistant 时承载
- * - `name` + `input` 在 tool_use 时承载;input 是任意 object(可能含本地路径 / 命令)
- * - `timestamp` 可选(ISO-8601)
- * 上游与后端都不强类型反序列化此结构,保留 unknown 让 viewer 透传。
- */
-export type NotesMessage = {
-  type?: string;
-  text?: string;
-  name?: string;
-  input?: unknown;
-  timestamp?: string;
-  [k: string]: unknown;
-};
-
 export interface NotesPromptRecord {
   agent_id: NotesAgentId;
   human_author: string | null;
-  /** 外链:某些 agent 把完整 transcript 存远端。UI 只显示 + 复制,不打开。 */
+  /**
+   * 外链:某些 agent 把完整 transcript 存远端。UI 只显示 + 复制,不打开。
+   * 上游 PromptRecord 仅此一项与对话相关 —— 内联 `messages` 数组自 v1.3.4 起从 spec 移除
+   * (spec E-002),不再镜像/展示。
+   */
   messages_url?: string;
-  messages: NotesMessage[];
   total_additions: number;
   total_deletions: number;
   accepted_lines: number;

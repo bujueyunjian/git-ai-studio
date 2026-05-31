@@ -7,7 +7,6 @@ use tauri::State;
 use crate::agents::{all_probes, AgentHookStatus, AgentKind};
 use crate::git_ai;
 use crate::git_ai::debug::DebugReport;
-use crate::git_ai::shim::ShimStatus;
 use crate::state::AppState;
 
 const CACHE_TTL: Duration = Duration::from_secs(60);
@@ -25,7 +24,6 @@ pub struct DiagnosticOverview {
     pub took_ms: u128,
     pub repo: Option<crate::state::RepoEntry>,
     pub report: DebugReport,
-    pub shim: ShimStatus,
     pub agents: Vec<AgentHookStatus>,
     /// 当后端某项关键检测整体降级(例:git-ai 未装),给前端的一句话提示。
     pub degraded: Option<DegradeReason>,
@@ -82,19 +80,11 @@ pub async fn diagnose_environment(
         Err(_) => DebugReport::empty(),
     };
 
-    // 3) git shim 校验(独立于 git-ai 是否装,即使没装也能跑)
-    let shim = git_ai::shim::check().await.unwrap_or(ShimStatus {
-        resolved_paths: vec![],
-        first_is_shim: false,
-        expected_shim: String::new(),
-        ok: false,
-    });
-
-    // 4) 7 个 Agent 并行
+    // 3) 7 个 Agent 并行
     let probes = all_probes();
     let agents = join_all(probes.into_iter().map(|p| async move { p.probe().await })).await;
 
-    // 5) 综合降级判断
+    // 4) 综合降级判断
     let degraded = if git_ai::binary::resolve().is_err() {
         Some(DegradeReason::GitAiNotFound {
             hint: "前往 Install 页一键安装,或在设置里通过 GIT_AI_PATH 指定二进制路径".into(),
@@ -113,7 +103,6 @@ pub async fn diagnose_environment(
         took_ms: start.elapsed().as_millis(),
         repo,
         report,
-        shim,
         agents,
         degraded,
     };

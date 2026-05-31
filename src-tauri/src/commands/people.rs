@@ -26,7 +26,9 @@ use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::commands::history::{filter_by_range, split_hits_and_misses, TimeRange};
+use crate::commands::history::{
+    filter_by_range, is_window_truncated, split_hits_and_misses, TimeRange,
+};
 use crate::db::stats_cache;
 use crate::error::AppError;
 use crate::git_ai;
@@ -157,7 +159,8 @@ pub async fn get_people_breakdown(
     let recent = commits::list_recent(&repo_path_buf, MAX_COMMITS_HARD_CAP)
         .await
         .map_err(|e| e.to_string())?;
-    let truncated = recent.len() >= MAX_COMMITS_HARD_CAP as usize;
+    // 截断只在 500 cap 可能挡住窗口内更老 commit 时才报(与 history.rs 同口径,修复"选一天也误报")。
+    let truncated = is_window_truncated(&recent, MAX_COMMITS_HARD_CAP as usize, range_start);
     let window = filter_by_range(&recent, &range, now);
 
     if window.is_empty() {

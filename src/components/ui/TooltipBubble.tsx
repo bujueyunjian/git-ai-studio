@@ -23,10 +23,10 @@ export function Tooltip({ content, children, side = "top" }: Props) {
         <TT.Content
           side={side}
           sideOffset={6}
-          className="z-50 max-w-xs rounded-md bg-slate-900 px-2.5 py-1.5 text-xs text-slate-100 shadow-lg dark:bg-slate-100 dark:text-slate-900"
+          className="z-50 max-w-xs rounded-md bg-foreground px-2.5 py-1.5 text-xs text-background shadow-lg"
         >
           {content}
-          <TT.Arrow className="fill-slate-900 dark:fill-slate-100" />
+          <TT.Arrow className="fill-foreground" />
         </TT.Content>
       </TT.Portal>
     </TT.Root>

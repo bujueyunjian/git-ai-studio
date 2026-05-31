@@ -7,8 +7,7 @@
 //!   `%P` 是 parent SHA 列表(空格分隔),`len > 1` 即 merge。
 //!   `\x1f` 字段分隔 + `\x1e` 记录分隔,author/subject 含换行也不会破解析。
 //! - is_merge 走 `git rev-list --parents -n 1 <sha>`,稳定且跨平台;不用 `^@`(PowerShell 转义坑)。
-//! - 系统 git 由 `which::which("git")` 解析;实际 PATH 顶部应该是 git-ai 的 shim,这点与
-//!   diagnostic 中的 ShimStatus 判定一致。本模块不关心 shim,只要 `git log` 能跑。
+//! - git 由 `which::which("git")` 解析,本模块不关心走的是系统 git 还是任何代理,只要 `git log` 能跑。
 
 use std::path::Path;
 use std::time::Duration;

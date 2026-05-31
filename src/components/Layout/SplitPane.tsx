@@ -26,6 +26,10 @@ interface SplitPaneProps {
   /** 左侧最大宽度,避免挤掉右侧。 */
   maxLeftWidth?: number;
   className?: string;
+  /** 折叠左栏:为 true 时左栏隐藏(让位右侧),只渲染 `collapsedHandle` 细条;拖拽分隔条一并隐藏。 */
+  collapsed?: boolean;
+  /** 折叠态下渲染的细条把手(通常是一个可点击展开的按钮),由父组件提供并自行接管点击。 */
+  collapsedHandle?: ReactNode;
 }
 
 function readPersistedWidth(key: string | undefined, fallback: number): number {
@@ -57,6 +61,8 @@ export function SplitPane({
   minLeftWidth = 160,
   maxLeftWidth = 640,
   className,
+  collapsed = false,
+  collapsedHandle,
 }: SplitPaneProps) {
   const [leftWidth, setLeftWidth] = useState<number>(() =>
     readPersistedWidth(storageKey, defaultLeftWidth),
@@ -109,21 +115,28 @@ export function SplitPane({
 
   return (
     <div ref={containerRef} className={`flex h-full min-h-0 ${className ?? ""}`}>
-      <div className="shrink-0 overflow-hidden" style={{ width: leftWidth }}>
-        {left}
-      </div>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="拖拽调整左侧宽度,双击恢复默认"
-        onPointerDown={onPointerDown}
-        onDoubleClick={onDoubleClick}
-        className="group relative w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-primary/70 active:bg-primary dark:bg-slate-800 dark:hover:bg-primary/90"
-        title="拖拽调整宽度 · 双击恢复默认"
-      >
-        {/* 加宽热区,实际拖拽容差更大 */}
-        <span className="absolute inset-y-0 -left-1 -right-1" />
-      </div>
+      {collapsed ? (
+        // 折叠态:只留细条把手(若提供),拖拽分隔条隐藏,右侧占满。
+        collapsedHandle != null && <div className="shrink-0 overflow-hidden">{collapsedHandle}</div>
+      ) : (
+        <>
+          <div className="shrink-0 overflow-hidden" style={{ width: leftWidth }}>
+            {left}
+          </div>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="拖拽调整左侧宽度,双击恢复默认"
+            onPointerDown={onPointerDown}
+            onDoubleClick={onDoubleClick}
+            className="group relative w-1 shrink-0 cursor-col-resize bg-slate-200 hover:bg-primary/70 active:bg-primary dark:bg-slate-800 dark:hover:bg-primary/90"
+            title="拖拽调整宽度 · 双击恢复默认"
+          >
+            {/* 加宽热区,实际拖拽容差更大 */}
+            <span className="absolute inset-y-0 -left-1 -right-1" />
+          </div>
+        </>
+      )}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{right}</div>
     </div>
   );

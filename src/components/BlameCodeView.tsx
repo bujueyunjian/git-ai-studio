@@ -1,17 +1,21 @@
-// CodeMirror 6 行级 Blame 视图。
+// CodeMirror 6 行级 Blame 视图(单一克制编码:整行淡底 + 行号染色,代码当主角)。
 //
 // # 关键事实
 // - AI 行映射来自后端 `lines` BTreeMap("13" 或 "15-25" → prompt_id);**只含 AI 行**
-// - 非 AI 行不在 map 里 → 渲染无 line decoration,背景是 vscode theme 默认底色
-// - aiLines 通过 StateField 持有,**gutter `lineMarker` 从 view.state.field 读**(不靠 useMemo 闭包)
+// - 非 AI 行不在 map 里 → 无 decoration,背景是 vscode theme 默认底色(克制:人写行=默认)
+// - aiLines 通过 StateField 持有,decoration / gutterLineClass 都从 view.state.field 读(不靠闭包)
 // - aiLines 引用变化时 dispatch StateEffect,EditorView 不重建
 //
-// # 点击事件
-// gutter `domEventHandlers.mousedown(view, line, event)` 拿 `event` 的 target rect 上抛 → React 控制 Popover 锚定
-// (修正评审 B #3:原先用 `window.getSelection()` 在 readOnly CM6 + gutter 路径下永远拿不到 rangeCount > 0)
+// # AI 编码(默认只此一种,刻意克制)
+// - AI 行整行淡主色底(`.blame-ai-line`)+ 行号染主色加粗(`gutterLineClass` → `.blame-ai-linenum`)
 //
-// # a11y
-// - AiGutterMarker DOM 节点加 `role="button"`、`tabIndex=0`、`aria-label`、键盘 Enter/Space 触发
+// # 可选作者/模型列(`lineAuthors`)
+// - **仅当调用方传入 `lineAuthors` 时**渲染左侧作者列:AI 行标模型、人写行标作者(色调区分)。
+// - Blame 页不传 → 全宽代码;Stats 的"文件逐行弹窗"传入 → 一眼看清每行是人还是哪个模型写的。
+//
+// # 点击下钻
+// 点 AI 行任意位置 → `posAtCoords` 反推行号 → 命中 aiLinesField 则上抛 `BlameLineClickEvent`,
+// 由上层渲染详情。键盘:editor 内插入符落在 AI 行时 Enter 触发。
 
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
@@ -20,8 +24,15 @@ import { rust } from "@codemirror/lang-rust";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
 import { markdown } from "@codemirror/lang-markdown";
-import { EditorState, StateEffect, StateField } from "@codemirror/state";
-import { Decoration, EditorView, gutter, GutterMarker, lineNumbers } from "@codemirror/view";
+import { EditorState, RangeSet, StateEffect, StateField } from "@codemirror/state";
+import {
+  Decoration,
+  EditorView,
+  gutter,
+  GutterMarker,
+  gutterLineClass,
+  lineNumbers,
+} from "@codemirror/view";
 import { vscodeDark, vscodeLight } from "@uiw/codemirror-theme-vscode";
 import CodeMirror from "@uiw/react-codemirror";
 import { useEffect, useMemo, useRef } from "react";
@@ -63,7 +74,7 @@ function langExtensionFor(file: string) {
 /** aiLines 推送 effect。 */
 const setAiLines = StateEffect.define<Map<number, string>>();
 
-/** StateField:同时为 line decoration 与 gutter 提供数据源(消除闭包陈旧)。 */
+/** StateField:为 line decoration 与 gutterLineClass 提供数据源(消除闭包陈旧)。 */
 const aiLinesField = StateField.define<Map<number, string>>({
   create: () => new Map(),
   update(map, tr) {
@@ -74,7 +85,7 @@ const aiLinesField = StateField.define<Map<number, string>>({
   },
 });
 
-/** lineAuthors 推送 effect + StateField。同 aiLines 走 effect → field 模式,避免 view 重建。 */
+/** lineAuthors 推送 effect + StateField(可选作者列的数据源)。 */
 const setLineAuthors = StateEffect.define<Map<number, BlameLineAuthor>>();
 const lineAuthorsField = StateField.define<Map<number, BlameLineAuthor>>({
   create: () => new Map(),
@@ -93,6 +104,7 @@ function withAlpha(hex: string, a: number): string {
   return `rgba(${(n >> 16) & 0xff}, ${(n >> 8) & 0xff}, ${n & 0xff}, ${a})`;
 }
 
+/** AI 行整行淡主色底。 */
 const aiLineDecorations = EditorView.decorations.compute([aiLinesField], (state) => {
   const map = state.field(aiLinesField);
   const sorted = [...map.keys()].sort((a, b) => a - b);
@@ -104,26 +116,24 @@ const aiLineDecorations = EditorView.decorations.compute([aiLinesField], (state)
   return Decoration.set(ranges);
 });
 
-/** a11y-friendly gutter marker。 */
-class AiGutterMarker extends GutterMarker {
-  constructor(private readonly lineNumber: number) {
-    super();
-  }
-  override eq(other: GutterMarker): boolean {
-    return other instanceof AiGutterMarker && other.lineNumber === this.lineNumber;
-  }
-  override toDOM() {
-    const el = document.createElement("button");
-    el.type = "button";
-    el.className = "blame-gutter-ai-marker";
-    el.setAttribute("role", "button");
-    el.setAttribute("tabindex", "0");
-    el.setAttribute("aria-label", `第 ${this.lineNumber} 行 AI 归属 — 点击展开 prompt 摘要`);
-    return el;
-  }
+/** 行号染色 marker:给 AI 行的 gutter 元素(含行号)加 class,CSS 染主色。 */
+class AiLineNumberMarker extends GutterMarker {
+  override elementClass = "blame-ai-linenum";
 }
 
-/** 行作者 gutter marker。display only,不可点(展开详情走 AI 蓝条 popover)。 */
+/** 行号 gutter 的 AI 行着色(从 aiLinesField 计算)。 */
+const aiLineNumberClass = gutterLineClass.compute([aiLinesField], (state) => {
+  const map = state.field(aiLinesField);
+  const sorted = [...map.keys()]
+    .sort((a, b) => a - b)
+    .filter((line) => line >= 1 && line <= state.doc.lines);
+  return RangeSet.of(
+    sorted.map((line) => new AiLineNumberMarker().range(state.doc.line(line).from)),
+    true,
+  );
+});
+
+/** 作者/模型列 marker。display only,展开详情走点击 AI 行。 */
 class AuthorGutterMarker extends GutterMarker {
   constructor(
     private readonly label: string,
@@ -152,20 +162,16 @@ class AuthorGutterMarker extends GutterMarker {
 export interface BlameLineClickEvent {
   lineNumber: number;
   promptId: string;
-  /** 点击元素的视口位置,React 端用作 Popover 锚点。 */
-  rect: { x: number; y: number; bottom: number };
 }
 
 /**
- * 每行作者归因。AI 行优先标 AI tool 简称 + AI human(由调用方在 Blame.tsx 组装);
- * 非 AI 行用 git blame 的 original_author。
+ * 每行作者归因(可选作者列用)。AI 行标模型简称(tone="ai"),人写行标 git 作者(tone="human")。
  */
 export interface BlameLineAuthor {
-  /** 显示文本(已截到 ~14 字符),如 "Alice" / "claude" / "Bob/cursor"。 */
+  /** 显示文本(已截到 ~14 字符)。 */
   label: string;
-  /** 显示色调:ai 蓝、human 灰。 */
   tone: "ai" | "human";
-  /** hover tooltip 用的全文(commit 短 sha + 时间 + 作者全名)。 */
+  /** hover tooltip 全文。 */
   title: string;
 }
 
@@ -173,75 +179,54 @@ export interface BlameCodeViewProps {
   code: string;
   filePath: string;
   aiLines: Map<number, string>;
-  /** 每行作者(包含 AI 与非 AI);key 为 1-based line number。无对应行 → 不渲染。 */
-  lineAuthors: Map<number, BlameLineAuthor>;
   theme: "light" | "dark";
   onLineClick: (e: BlameLineClickEvent) => void;
+  /** 传入则渲染左侧作者/模型列(每行是人还是哪个模型);不传 → 全宽代码,无此列。 */
+  lineAuthors?: Map<number, BlameLineAuthor>;
 }
 
 export function BlameCodeView({
   code,
   filePath,
   aiLines,
-  lineAuthors,
   theme,
   onLineClick,
+  lineAuthors,
 }: BlameCodeViewProps) {
   const viewRef = useRef<EditorView | null>(null);
   const onLineClickRef = useRef(onLineClick);
   onLineClickRef.current = onLineClick;
+  const withAuthors = !!lineAuthors;
 
   const extensions = useMemo(() => {
     const lang = langExtensionFor(filePath);
     const aiColor = bucketColor("ai", theme);
 
-    const dispatchClick = (target: HTMLElement, lineNumber: number, promptId: string) => {
-      const rect = target.getBoundingClientRect();
-      onLineClickRef.current({
-        lineNumber,
-        promptId,
-        rect: { x: rect.left, y: rect.top, bottom: rect.bottom },
-      });
-    };
-
-    const aiGutter = gutter({
-      class: "blame-ai-gutter",
-      lineMarker(view, line) {
-        const lineNum = view.state.doc.lineAt(line.from).number;
-        const map = view.state.field(aiLinesField); // 从 state 读,避免闭包陈旧
-        return map.has(lineNum) ? new AiGutterMarker(lineNum) : null;
-      },
-      lineMarkerChange: (update) =>
-        update.docChanged ||
-        update.transactions.some((tr) => tr.effects.some((e) => e.is(setAiLines))),
-      initialSpacer: () => new AiGutterMarker(0),
-      domEventHandlers: {
-        mousedown(view, line, evt) {
-          const lineNum = view.state.doc.lineAt(line.from).number;
-          const map = view.state.field(aiLinesField);
-          const promptId = map.get(lineNum);
-          if (!promptId) return false;
-          const target = evt.target as HTMLElement | null;
-          if (target) dispatchClick(target, lineNum, promptId);
-          return false;
-        },
+    // 点 AI 行任意位置 → 反推行号 → 命中则上抛(不带 rect,上层用停靠/弹窗详情)。
+    const clickHandler = EditorView.domEventHandlers({
+      mousedown(evt, view) {
+        const pos = view.posAtCoords({ x: evt.clientX, y: evt.clientY });
+        if (pos == null) return false;
+        const lineNum = view.state.doc.lineAt(pos).number;
+        const promptId = view.state.field(aiLinesField).get(lineNum);
+        if (!promptId) return false;
+        onLineClickRef.current({ lineNumber: lineNum, promptId });
+        return false;
       },
     });
 
-    // 作者列 gutter:显示在 lineNumbers 之前的最左侧。
-    // 内容来自 lineAuthorsField,每行一个作者标签;AI 行用主色,非 AI 行用灰色。
+    // 可选作者列:仅当调用方传入 lineAuthors 时启用,渲染在行号之后、代码之前。
     const authorGutter = gutter({
       class: "blame-author-gutter",
       lineMarker(view, line) {
         const lineNum = view.state.doc.lineAt(line.from).number;
-        const map = view.state.field(lineAuthorsField);
-        const a = map.get(lineNum);
+        const a = view.state.field(lineAuthorsField).get(lineNum);
         return a ? new AuthorGutterMarker(a.label, a.tone, a.title) : null;
       },
       lineMarkerChange: (update) =>
         update.docChanged ||
         update.transactions.some((tr) => tr.effects.some((e) => e.is(setLineAuthors))),
-      // 占位用最长可能 label(14 字符)保证 gutter 宽度稳定不抖动
+      // 占位用最长可能 label(14 字符)保证列宽稳定不抖动
       initialSpacer: () => new AuthorGutterMarker("M".repeat(14), "human", ""),
     });
 
@@ -249,10 +234,10 @@ export function BlameCodeView({
       EditorState.readOnly.of(true),
       lineNumbers(),
       aiLinesField,
-      lineAuthorsField,
       aiLineDecorations,
-      authorGutter,
-      aiGutter,
+      aiLineNumberClass,
+      clickHandler,
+      ...(withAuthors ? [lineAuthorsField, authorGutter] : []),
       EditorView.theme({
         // `&` = `.cm-editor`:把编辑器盒子钉死在右栏宽度内,否则下面 `.cm-content`
         // 的 `max-content` 会把整个编辑器撑得比右栏宽,被祖先 overflow-hidden 裁掉
@@ -274,22 +259,13 @@ export function BlameCodeView({
         ".cm-content": { minWidth: "max-content" }, // 防 AI 行背景水平滚动露白
         ".blame-ai-line": {
           backgroundColor: withAlpha(aiColor, 0.18),
-        },
-        ".blame-gutter-ai-marker": {
-          display: "block",
-          width: "4px",
-          height: "100%",
-          backgroundColor: aiColor,
-          marginLeft: "2px",
-          padding: 0,
-          border: "none",
           cursor: "pointer",
         },
-        ".blame-gutter-ai-marker:focus-visible": {
-          outline: `2px solid ${aiColor}`,
-          outlineOffset: "1px",
+        // 行号 gutter 上 AI 行染主色加粗(单一编码的第二半:行号着色)
+        ".blame-ai-linenum": {
+          color: aiColor,
+          fontWeight: "600",
         },
-        ".blame-ai-gutter": { paddingLeft: "0", paddingRight: "0" },
         ".blame-author-gutter": {
           paddingLeft: "6px",
           paddingRight: "6px",
@@ -307,16 +283,12 @@ export function BlameCodeView({
             "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif",
           cursor: "default",
         },
-        ".blame-author-ai": {
-          color: aiColor,
-        },
-        ".blame-author-human": {
-          color: theme === "dark" ? "#94a3b8" : "#64748b",
-        },
+        ".blame-author-ai": { color: aiColor },
+        ".blame-author-human": { color: theme === "dark" ? "#94a3b8" : "#64748b" },
       }),
       ...(lang ? [lang] : []),
     ];
-  }, [filePath, theme]);
+  }, [filePath, theme, withAuthors]);
 
   // aiLines 引用变化 → dispatch effect 推送到 StateField(不重建 view)
   useEffect(() => {
@@ -325,41 +297,25 @@ export function BlameCodeView({
     v.dispatch({ effects: setAiLines.of(aiLines) });
   }, [aiLines]);
 
-  // 同样路径推送 lineAuthors,不重建 view
+  // lineAuthors 同路径推送(可选列;未传则推空 Map,gutter 渲染为空)
   useEffect(() => {
     const v = viewRef.current;
     if (!v) return;
-    v.dispatch({ effects: setLineAuthors.of(lineAuthors) });
+    v.dispatch({ effects: setLineAuthors.of(lineAuthors ?? new Map()) });
   }, [lineAuthors]);
 
-  // 键盘可达性:Enter/Space 在 gutter 按钮上触发同 mousedown 路径
+  // 键盘可达性:editor 内插入符落在 AI 行时按 Enter 触发同下钻路径(readOnly 仍可移动插入符)
   useEffect(() => {
     const v = viewRef.current;
     if (!v) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Enter" && e.key !== " ") return;
-      const target = e.target as HTMLElement | null;
-      if (!target?.classList?.contains("blame-gutter-ai-marker")) return;
+      if (e.key !== "Enter") return;
+      const head = v.state.selection.main.head;
+      const lineNum = v.state.doc.lineAt(head).number;
+      const promptId = v.state.field(aiLinesField).get(lineNum);
+      if (!promptId) return;
       e.preventDefault();
-      // 通过 DOM 顺序反推行号:walk up 找 .cm-gutterElement,index 与 doc.line 对应
-      const gel = target.closest(".cm-gutterElement");
-      if (!gel) return;
-      const all = Array.from(gel.parentElement?.children ?? []);
-      const visIdx = all.indexOf(gel);
-      if (visIdx < 0) return;
-      // 视口可见区域的首行
-      const blockAtTop = v.lineBlockAtHeight(v.scrollDOM.scrollTop);
-      const topLineNumber = v.state.doc.lineAt(blockAtTop.from).number;
-      const lineNum = topLineNumber + visIdx;
-      const map = v.state.field(aiLinesField);
-      const pid = map.get(lineNum);
-      if (!pid) return;
-      const rect = target.getBoundingClientRect();
-      onLineClickRef.current({
-        lineNumber: lineNum,
-        promptId: pid,
-        rect: { x: rect.left, y: rect.top, bottom: rect.bottom },
-      });
+      onLineClickRef.current({ lineNumber: lineNum, promptId });
     };
     const dom = v.scrollDOM;
     dom.addEventListener("keydown", onKeyDown);
@@ -379,7 +335,7 @@ export function BlameCodeView({
       onCreateEditor={(view) => {
         viewRef.current = view;
         view.dispatch({
-          effects: [setAiLines.of(aiLines), setLineAuthors.of(lineAuthors)],
+          effects: [setAiLines.of(aiLines), setLineAuthors.of(lineAuthors ?? new Map())],
         });
       }}
       basicSetup={{

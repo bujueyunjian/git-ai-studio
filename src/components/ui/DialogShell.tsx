@@ -50,17 +50,19 @@ export function Dialog({
           onInteractOutside={(e) => {
             if (!dismissible) e.preventDefault();
           }}
-          className={`fixed left-1/2 top-1/2 z-50 ${w} -translate-x-1/2 -translate-y-1/2 rounded-lg border border-slate-200 bg-white p-5 shadow-xl dark:border-border dark:bg-card`}
+          className={`fixed left-1/2 top-1/2 z-50 ${w} -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-5 shadow-xl`}
         >
           <div className="flex items-start justify-between gap-4">
             <div>
               <D.Title className="text-base font-semibold">{title}</D.Title>
               {description && (
-                <D.Description className="mt-1 text-sm text-slate-500">{description}</D.Description>
+                <D.Description className="mt-1 text-sm text-muted-foreground">
+                  {description}
+                </D.Description>
               )}
             </div>
             {dismissible && (
-              <D.Close className="rounded-md p-1 text-slate-500 hover:bg-accent">
+              <D.Close className="rounded-md p-1 text-muted-foreground hover:bg-accent">
                 <X className="h-4 w-4" />
               </D.Close>
             )}

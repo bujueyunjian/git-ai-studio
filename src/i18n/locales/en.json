@@ -59,6 +59,7 @@
     }
   },
   "stats": {
+    "workingScopeHint": "Note: this is the current repo's uncommitted changes; the Dashboard's \"Uncommitted\" card aggregates your selected repo set (which may not include this repo).",
     "degraded": {
       "repoMissing": {
         "title": "Pick a repository first",
@@ -124,7 +125,40 @@
         "title": "git-ai not detected",
         "description": "Dashboard's historical aggregation depends on git-ai stats. Come back here after installing.",
         "cta": "Go to Install"
+      },
+      "noReposSelected": {
+        "title": "No repositories selected",
+        "description": "The Dashboard shows your selected \"aggregate set\" (cross-repo overview); Commit attribution / People / Blame show the single repo you're currently drilling into. Add at least one repo on the Repositories page, then come back for the cross-repo trend.",
+        "cta": "Go to Repositories"
       }
+    },
+    "aggregateScope": "Aggregating {{n}} repos",
+    "dataHint": "All parsed locally by git-ai. Window AI share = Σ AI lines / Σ (human + unknown + AI) lines; click the ⓘ next to any metric / section title for the full formula and definition.",
+    "currentNotIncluded": "The repo you're drilling into, \"{{repo}}\", isn't in the Dashboard's aggregate set — the numbers above come from your other selected repos, not it.",
+    "addCurrentToAggregate": "Add to aggregate",
+    "aggregating": "Aggregating stats across {{n}} repos…",
+    "aggregateFailed": "Cross-repo aggregation failed: {{msg}}",
+    "failedReposHint": "{{n}} repos failed to collect and are excluded from the aggregate (never counted as zero).",
+    "truncatedReposHint": "{{n}} repos hit the 500-commit cap; older commits are not included in this window.",
+    "granularity": { "day": "Daily", "week": "Weekly", "month": "Monthly" },
+    "scope": { "onlyMine": "Only me", "everyone": "Everyone" },
+    "delta": { "vsPrevPeriod": "vs previous period" },
+    "working": {
+      "title": "Uncommitted (now)",
+      "hint": "your current working-tree edits · live",
+      "aiShare": "AI share",
+      "aiLines": "AI lines",
+      "scope": "{{n}} repos with uncommitted changes",
+      "allClean": "No uncommitted changes",
+      "failedHint": "{{n}} repos failed to read; excluded"
+    },
+    "recentCommits": { "repo": "Repo" },
+    "repoBreakdown": {
+      "title": "By repository",
+      "repo": "Repo",
+      "aiShare": "AI share",
+      "aiLines": "AI lines",
+      "commits": "Commits"
     },
     "emptyWindow": {
       "title": "No commits in the selected range",
@@ -182,7 +216,7 @@
       "agentLabel": "Agent",
       "humanLabel": "Human author",
       "loginRequired": "Not logged in to git-ai; cannot resolve the human author",
-      "scopeWarningRepoWide": "(repository-wide totals, not just this file)",
+      "scopeWarningRepoWide": "(per-prompt counts from this note, not just this file; summed across squashed/merged commits)",
       "acceptedTemplate": "{{n}} lines accepted",
       "overridenTemplate": "{{n}} lines overridden by humans",
       "totalAdditionsTemplate": "{{n}} lines produced",
@@ -197,32 +231,35 @@
       "ai": "AI-authored line",
       "nonAi": "Non-AI line (human-edited, missed by hooks, or note dropped)"
     },
+    "title": "Blame",
+    "loading": "Loading…",
+    "errorPrefix": "Blame failed",
+    "fileDegradedFallbackTitle": "Cannot display file",
+    "lineDetail": {
+      "close": "Close attribution panel"
+    },
     "lrange": {
       "label": "Range (-L)",
       "placeholder": "e.g. 15,25",
+      "apply": "Apply",
       "invalid": "Invalid format. Expecting 'start,end' where start ≤ end and both > 0."
     },
-    "fileSearchPlaceholder": "Search files…",
-    "fileListEmpty": "No files matched",
-    "fileListHintTemplate": "{{n}} files total; type a keyword to filter (fuzzy directory-prefix match).",
+    "commitNav": {
+      "subtitle": "Pick a commit to see which files it changed → click a file for whole-file line attribution",
+      "searchPlaceholder": "Search message / sha…",
+      "heading": "Commit history",
+      "loading": "Parsing git-ai stats…",
+      "truncated": "capped at {{n}}",
+      "truncatedTitle": "Loaded the most recent {{n}} commits; older ones may be excluded"
+    },
+    "instructions": {
+      "pickCommit": "Pick a commit on the left",
+      "pickFile": "Pick a changed file of that commit below-left",
+      "body": "AI-written lines are tinted blue with blue line numbers; human lines have no fill. Click any AI line to expand its prompt summary (which agent / model, accepted / overridden)."
+    },
     "refPicker": {
-      "label": "Ref:",
-      "currentHead": "HEAD",
-      "triggerTitle": "Filter the blame view by branch / commit sha",
-      "popoverTitle": "Pick a ref",
-      "resetToHead": "Back to HEAD",
-      "branchesHeading": "Local branches",
-      "noBranches": "No local branches",
-      "branchesLoading": "Loading branches…",
-      "branchesFailed": "Failed to load branches",
-      "shaInputHeading": "Or paste a commit sha / tag",
-      "shaInputPlaceholder": "e.g. abc1234 or v1.2.0",
-      "shaApply": "Apply",
-      "shaEmpty": "Enter a sha or tag",
       "refNotFoundTitle": "Ref not found",
-      "refNotFoundTemplate": "git cannot find {{r}} (or it is not a commit object). Check the spelling or pick a branch from the dropdown.",
-      "activeChipTemplate": "Current: {{r}}",
-      "searchBranchesPlaceholder": "Search branch name…"
+      "refNotFoundTemplate": "git cannot find {{r}} (or it is not a commit object). Check the spelling or pick another commit."
     }
   },
   "timeRange": {
@@ -327,13 +364,6 @@
       "promptLabel": "AI",
       "humanLabel": "Human",
       "sessionLabel": "Session"
-    },
-    "messages": {
-      "collapsedHint": "Conversation content is rendered locally and never uploaded",
-      "typeUser": "user",
-      "typeAssistant": "assistant",
-      "typeToolUse": "tool use",
-      "noMessages": "This prompt has no messages recorded"
     },
     "actions": {
       "copyHash": "Copy hash",
@@ -494,10 +524,8 @@
   },
   "people": {
     "page": {
-      "title": "By Person",
+      "title": "Author Attribution",
       "subtitle": "Aggregates AI authorship in the current repo window by author_email; numbers are parsed locally and uploaded nowhere.",
-      "searchPlaceholder": "Search name / email…",
-      "exportCsv": "Export CSV",
       "refresh": "Refresh now",
       "refreshing": "Refreshing…",
       "identityHint": "Identity key = lower-cased author_email; emails differing only in case are merged into the same row. git mailmap is not used.",
@@ -506,12 +534,12 @@
     "degraded": {
       "repoMissing": {
         "title": "Pick a repository first",
-        "description": "By-person stats need a git repository to aggregate commits by author. Choose one on the Repositories page.",
+        "description": "Author attribution needs a git repository to aggregate commits by author. Choose one on the Repositories page.",
         "cta": "Go to Repositories"
       },
       "gitAiMissing": {
         "title": "git-ai not detected",
-        "description": "By-person stats depend on git-ai stats. Come back here after installing.",
+        "description": "Author attribution depends on git-ai stats. Come back here after installing.",
         "cta": "Go to Install"
       }
     },
@@ -519,9 +547,15 @@
       "title": "No commits in the selected range",
       "description": "There are no commits in this window, so nothing to aggregate by person."
     },
-    "emptySearch": {
-      "title": "No authors matched",
-      "description": "Try clearing the search box or using a different keyword."
+    "emptyMine": {
+      "title": "You have no commits in this window",
+      "description": "Under the \"Only me\" scope, the current git user made no commits in the selected range.",
+      "cta": "Show everyone"
+    },
+    "cannotIdentifyMe": {
+      "title": "Can't determine the current git user",
+      "description": "This repo has no user.email configured, so \"Only me\" can't filter. Configure it and retry, or view all authors.",
+      "cta": "Show everyone"
     },
     "failedHintTemplate": "{{n}} commits failed stats collection this run. They are counted in \"commits\" but excluded from AI/human/unknown totals so the numbers aren't polluted by zero-bucket fallbacks.",
     "truncatedHintTemplate": "The repository commit count exceeded the {{cap}}-commit cap; older commits in this window may have been skipped. Use a shorter window before aggregating.",
@@ -550,6 +584,12 @@
       "humanTemplate": "Human +{{n}}"
     }
   },
+  "commitList": {
+    "empty": "No matching commits",
+    "failed": "Failed",
+    "failedTitle": "Collection failed",
+    "countTemplate": "{{n}} commits"
+  },
   "changedFiles": {
     "title": "Files changed in this commit",
     "empty": "This commit has no changed files (it may be an empty commit).",
@@ -568,13 +608,47 @@
       "B": "Split"
     },
     "aiLineChipTemplate": "{{n}} AI lines",
-    "jumpBlameTitle": "Open in Blame (locked to this commit)"
+    "jumpBlameTitle": "Open in Blame (locked to this commit)",
+    "deletedFileTitle": "Deleted file — line attribution unavailable",
+    "viewBlameTitle": "View line-by-line attribution for this file"
   },
   "authorsJumpBlame": {
     "noAiLinesDisabled": "This author has no AI-authored lines in any commit within the window; cannot jump",
     "jumpTitle": "Open AI lines from this author's latest commit in Blame"
   },
   "diagnostic": {
+    "agentHooks": {
+      "title": "AI Agent Hooks",
+      "configuredCountTemplate": "{{configured}}/{{total}} set",
+      "fixMissingTemplate": "Fix missing ({{n}})",
+      "fixMissingDisabledTitle": "No agent needs fixing right now",
+      "fixMissingTitleTemplate": "Will write official hooks for {{n}} agent(s)",
+      "statusConfigured": "Configured",
+      "statusMissing": "Missing",
+      "statusNotInstalled": "Not installed",
+      "fixThis": "Fix this",
+      "fixThisTitleTemplate": "Trigger hook repair for {{agent}} only",
+      "unknownPath": "(unknown path)"
+    },
+    "checklist": {
+      "title": "Automatic checks",
+      "allPassTemplate": "All passed {{pass}}/{{total}}",
+      "needAttentionTemplate": "{{n}} need attention",
+      "expand": "Show details",
+      "collapse": "Collapse",
+      "statusPass": "Pass",
+      "statusWarn": "Warn",
+      "statusFail": "Fail",
+      "statusNa": "N/A"
+    },
+    "hero": {
+      "allGood": "All set",
+      "needAttentionTemplate": "{{n}} need attention"
+    },
+    "report": {
+      "title": "Detailed report",
+      "summaryTemplate": "{{n}} sections"
+    },
     "check": {
       "gitAiBinaryLabel": "git-ai binary present",
       "gitAiBinaryImpact": "No AI authorship metric can be produced (without the tagger, there's no stats / blame / notes)",
@@ -582,14 +656,6 @@
       "gitAiVersionLabel": "git-ai version",
       "gitAiVersionImpactWarn": "This version is marked as having known issues. Local stats are unaffected, but remote aggregation (team dashboard) stats may be skewed.",
       "gitAiVersionFix": "Switch version",
-      "gitShimLabel": "git proxy shim is active",
-      "gitShimErrDetail": "Neither where nor which found a git binary",
-      "gitShimErrImpact": "git itself is missing; git-ai's proxy chain cannot start",
-      "gitShimGoInstall": "Go to Install",
-      "gitShimFirstIsShimTemplate": "First line = {{expected}}",
-      "gitShimMismatchTemplate": "First candidate {{actual}} ≠ {{expected}}",
-      "gitShimMismatchImpact": "When PATH order is wrong, git resolves to the system binary instead of git-ai's proxy; commits do not trigger authorship and all stats are 0",
-      "gitShimReinstall": "Reinstall",
       "loginLabel": "git-ai login state",
       "loginImpactNotLoggedIn": "Local authorship still works, but pushes to remote aggregation (team dashboard) may fail",
       "loginFix": "See login guide",
@@ -620,7 +686,6 @@
     },
     "overviewChips": {
       "gitAi": "git-ai",
-      "gitShim": "Git Shim",
       "login": "Login",
       "hooks": "Hooks",
       "repo": "Repo"
@@ -780,9 +845,10 @@
   "nav": {
     "appName": "Git AI Studio",
     "appTagline": "Local AI code authorship",
+    "repo": "Repositories",
     "dashboard": "Dashboard",
-    "commits": "Commits",
-    "people": "People",
+    "commits": "Commit Attribution",
+    "people": "Authors",
     "blame": "Blame",
     "notes": "git notes",
     "checkpoints": "Checkpoints",
@@ -831,10 +897,10 @@
   },
   "onboarding": {
     "title": "Finish setup in three steps to see which lines your AI wrote",
-    "description": "Git AI Studio relies on the external git-ai CLI: install git-ai, pick a local repository, and configure hooks for your AI agent before the Dashboard shows data.",
+    "description": "Git AI Studio relies on the external git-ai CLI: install git-ai, add a repository to the Dashboard's aggregate set, and configure hooks for your AI agent before the Dashboard shows data.",
     "checklist": {
       "gitAi": "Install the git-ai CLI",
-      "repo": "Select a local repository",
+      "repo": "Add a repo to the Dashboard aggregate",
       "hook": "Configure a hook for an AI agent"
     },
     "cta": "Finish setup",
@@ -854,11 +920,33 @@
   },
   "repo": {
     "title": "Repositories",
-    "subtitle": "Configure scan roots, then pick a repository as the target for diagnostics and stats.",
+    "subtitle": "Add the repos to roll up in the Dashboard's cross-repo view, or hit View to dig into one repo's Stats / People / Blame.",
     "current": "Current",
+    "summary": {
+      "aggregateTitle": "Aggregated analysis (cross-repo Dashboard)",
+      "aggregateCount": "{{n}} repos",
+      "aggregateHint": "Added repos roll up into the Dashboard's cross-repo view.",
+      "currentTitle": "Current repo",
+      "currentNone": "None selected",
+      "currentHint": "Stats / People / Blame / the desktop pet all show this repo."
+    },
+    "manage": {
+      "title": "Scan roots & recently opened",
+      "rootCount": "{{n}} scan roots"
+    },
+    "aggregate": {
+      "includeLabel": "Include in cross-repo aggregation",
+      "add": "Add",
+      "added": "Added",
+      "addTooltip": "Add to the cross-repo Dashboard",
+      "removeTooltip": "Click to remove from aggregation",
+      "selectedCount": "{{n}} repos in aggregation",
+      "selectAll": "Select visible",
+      "clear": "Clear",
+      "saveFailed": "Failed to save aggregation repos"
+    },
     "toast": {
       "saveRootsFailed": "Failed to save scan roots",
-      "switched": "Repository switched",
       "switchFailed": "Failed to switch repository",
       "openFolderFailed": "Failed to open folder",
       "openPickerFailed": "Failed to open directory picker"
@@ -882,21 +970,23 @@
     "all": {
       "title": "All repositories",
       "filterPlaceholder": "Filter by name or path",
-      "empty": "No matching repositories. Check your scan roots or filter term."
+      "empty": "No matching repositories. Check your scan roots or filter term.",
+      "emptyNoRoots": "No repositories found yet. Expand \"Scan roots & recently opened\" below to add the top-level folder where you keep your code."
     },
     "row": {
       "dirty": "Uncommitted",
       "checkpointCount": "{{n}} checkpoints",
       "gitAiEmpty": ".git/ai empty",
       "openInExplorer": "Open in file manager",
-      "selected": "Selected",
-      "switching": "Switching",
-      "select": "Select"
+      "view": "View",
+      "viewTooltip": "Open this repo's single-repo views (Stats / People / Blame)"
     }
   },
   "update": {
     "available": "Update available: v{{version}} — click to view and install",
     "checkForUpdates": "Check for updates",
+    "checking": "Checking…",
+    "checkingInProgress": "Already checking for updates…",
     "downloadAndInstall": "Download and install v{{version}}",
     "downloading": "Downloading…",
     "downloadingPercent": "Downloading… {{percent}}%",

@@ -250,7 +250,9 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
           <div>
             <h2 className="text-sm font-medium text-muted-foreground">远端最新版本</h2>
             <div className="mt-1 flex items-center gap-2">
-              <ArrowUp className="h-5 w-5 text-emerald-500" />
+              <ArrowUp
+                className={cn("h-5 w-5", latest ? "text-emerald-500" : "text-muted-foreground/50")}
+              />
               {releasesQ.isLoading ? (
                 <span className="text-sm text-muted-foreground">查询中…</span>
               ) : latest ? (
@@ -258,6 +260,8 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
                   <span className="text-lg font-semibold">{latest.tag}</span>
                   <Badge tone="success">latest</Badge>
                 </>
+              ) : releasesQ.isError ? (
+                <span className="text-sm text-muted-foreground">暂不可达</span>
               ) : (
                 <span className="text-sm text-muted-foreground">无可用版本</span>
               )}
@@ -267,9 +271,22 @@ export default function InstallPage({ embedded = false }: { embedded?: boolean }
                 304 命中(版本列表自上次以来未变化)
               </div>
             )}
+            {/* 远端版本查询失败属**良性暂时态**(多为 GitHub 匿名 API 限流 60次/小时·按 IP,或网络不通),
+                不影响已装版本使用 —— 故用中性提示 + 就近重试,而非醒目红错;原始状态留 title 供排查。 */}
             {releasesQ.isError && (
-              <div className="mt-1 text-[11px] text-rose-600 dark:text-rose-400">
-                {(releasesQ.error as Error).message}
+              <div
+                className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground"
+                title={(releasesQ.error as Error).message}
+              >
+                <span>GitHub 暂时限流或不可达,稍后重试(不影响已装版本)。</span>
+                <button
+                  type="button"
+                  onClick={() => releasesQ.refetch()}
+                  disabled={releasesQ.isFetching}
+                  className="underline underline-offset-2 hover:text-foreground disabled:opacity-50"
+                >
+                  {releasesQ.isFetching ? "重试中…" : "重试"}
+                </button>
               </div>
             )}
             {latest && (

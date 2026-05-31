@@ -45,24 +45,19 @@ impl AgentProbe for OpenCodeProbe {
 mod tests {
     use super::*;
     use std::fs;
+    use tempfile::TempDir;
 
-    /// 用 tempdir 隔离每个测试 — 直接传 path 给 helper,不走 env(并行测试无 race)
-    fn tmp_plugin_path() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "git-ai-studio-opencode-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        dir.join("git-ai.ts")
+    /// 用 OS 级唯一 tempdir 隔离每个测试 — 直接传 path 给 helper,不走 env。
+    /// 返回 guard 与插件路径:调用方必须持有 guard,drop 时目录才回收(否则文件先被删)。
+    fn tmp_plugin_path() -> (TempDir, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("git-ai.ts");
+        (dir, path)
     }
 
     #[test]
     fn missing_file_reports_undetected() {
-        let p = tmp_plugin_path();
+        let (_dir, p) = tmp_plugin_path();
         // 不写文件:probe_ts_plugin 应返 detected=false
         let s = probe_ts_plugin(AgentKind::OpenCode, p, "missing");
         assert!(!s.detected);
@@ -71,7 +66,7 @@ mod tests {
 
     #[test]
     fn placeholder_present_means_not_configured() {
-        let p = tmp_plugin_path();
+        let (_dir, p) = tmp_plugin_path();
         fs::write(&p, r#"const GIT_AI_BIN = "__GIT_AI_BINARY_PATH__";"#).unwrap();
         let s = probe_ts_plugin(AgentKind::OpenCode, p, "missing");
         assert!(s.detected);
@@ -81,7 +76,7 @@ mod tests {
 
     #[test]
     fn real_path_substituted_means_configured() {
-        let p = tmp_plugin_path();
+        let (_dir, p) = tmp_plugin_path();
         fs::write(&p, r#"const GIT_AI_BIN = "/home/u/.git-ai/bin/git-ai";"#).unwrap();
         let s = probe_ts_plugin(AgentKind::OpenCode, p, "missing");
         assert!(s.detected);

@@ -14,6 +14,15 @@ export function rangeKey(r: TimeRange): string {
 }
 
 /**
+ * 把聚合仓库集合序列化为稳定 queryKey 片段:排序后 stringify ⇒ 顺序无关(勾选顺序不同、
+ * 集合相同 → 同一 key)。与 rangeKey 同模式。Dashboard(M4)用
+ * `["history_agg", reposKey(repos), rangeKey(range)]`。入参应是后端已 canonicalize 的路径。
+ */
+export function reposKey(paths: string[]): string {
+  return JSON.stringify([...paths].sort());
+}
+
+/**
  * 切换"当前仓库"或"当前 HEAD"后,所有依赖 HEAD 的页面/数据都要刷新。
  *
  * # 设计为什么是逃生通道
@@ -29,7 +38,7 @@ export function rangeKey(r: TimeRange): string {
  *
  * # 谁应该被 invalidate
  * - **repo 元信息**:current_repo / recent_repos / list_branches
- * - **HEAD 派生数据**:blame / blame_files / read_file / commit_stats /
+ * - **HEAD 派生数据**:blame / blame_files / read_file / commit_stats / commit_status /
  *   list_recent_commits / list_ai_notes / history
  * - **环境/诊断**:diagnose_environment / effective_ignore_patterns
  *
@@ -53,6 +62,9 @@ export function invalidateRepoScopedQueries(qc: QueryClient): void {
   qc.invalidateQueries({ queryKey: ["blame_files"] });
   qc.invalidateQueries({ queryKey: ["read_file"] });
   qc.invalidateQueries({ queryKey: ["commit_stats"] });
+  // 未提交工作树摘要(WorkingDirSummary)走 commit_status;漏了它会导致切仓/分支后
+  // "未提交 xx 行" 仍显示上一个仓库/分支的旧值(A1)。
+  qc.invalidateQueries({ queryKey: ["commit_status"] });
   qc.invalidateQueries({ queryKey: ["list_recent_commits"] });
   qc.invalidateQueries({ queryKey: ["list_ai_notes"] });
   qc.invalidateQueries({ queryKey: ["history"] });

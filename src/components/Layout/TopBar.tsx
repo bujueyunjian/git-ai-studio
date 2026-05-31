@@ -175,13 +175,14 @@ export function TopBar({ onNavigate, onRepoChanged }: Props) {
       {/* 更新徽章:仅在有可用更新时显示,点击深链 settings 查看 / 安装 */}
       <UpdateBadge onClick={() => onNavigate("settings")} />
 
-      {/* 设置齿轮:深链 settings */}
+      {/* 设置齿轮:深链 settings。ghost icon 按钮(参考 cc-switch),中性 token hover,
+          不抢色(原硬编码蓝 hover 已移除);方形定宽 + focus-visible ring 兼顾键盘可达。 */}
       <Tooltip content={t("topBar.settingsTooltip")} side="bottom">
         <button
           type="button"
           onClick={() => onNavigate("settings")}
           aria-label={t("topBar.settingsTooltip")}
-          className="inline-flex items-center rounded-md p-1.5 text-muted-foreground hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Settings className="h-4 w-4" />
         </button>
@@ -294,7 +295,7 @@ function BranchSwitcher({
                 </div>
               )}
               {branchesQ.isError && (
-                <div className="px-2 py-1 text-xs text-destructive">
+                <div className="px-2 py-1 text-xs text-danger">
                   {(branchesQ.error as Error).message}
                 </div>
               )}
@@ -318,7 +319,7 @@ function BranchSwitcher({
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     {b.is_current ? (
-                      <Check className="h-3 w-3 shrink-0 text-emerald-500" />
+                      <Check className="h-3 w-3 shrink-0 text-success" />
                     ) : (
                       <span className="h-3 w-3 shrink-0" aria-hidden="true" />
                     )}

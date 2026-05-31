@@ -9,15 +9,20 @@
 
 import { useQuery } from "@tanstack/react-query";
 
-import { currentRepo, diagnoseEnvironment, resolveGitAiPath } from "./api";
+import { diagnoseEnvironment, getAggregateRepos, resolveGitAiPath } from "./api";
 import type { StatusLevel } from "./types";
 
 /** Setup 三件套各自的就绪态,供 onboarding 清单逐项打勾。 */
 export interface SetupChecklist {
   /** git-ai CLI 是否已解析到。 */
   gitAiInstalled: boolean;
-  /** 是否已选中一个本地仓库。 */
-  repoSelected: boolean;
+  /**
+   * 是否至少有一个**有效**仓库被加入 Dashboard 聚合集(`aggregate_repos`)。
+   * 刻意不看 `current_repo`(单仓下钻焦点):onboarding 卡挂在 Dashboard 上,"就绪"应当意味着
+   * **Dashboard 真的有数据可看**——而 Dashboard 看的是聚合集,不是当前下钻仓。否则会出现
+   * "走完引导 Dashboard 仍空"的脱节(当前仓有数据但没加入聚合)。
+   */
+  repoAdded: boolean;
   /** 是否至少有一个 AI agent 配好了 hook(detected && configured)。 */
   hasConfiguredHook: boolean;
 }
@@ -53,9 +58,9 @@ export function useSetupStatus(): SetupStatus {
     staleTime: 60_000,
     retry: false,
   });
-  const repoQ = useQuery({
-    queryKey: ["current_repo"],
-    queryFn: currentRepo,
+  const aggregateQ = useQuery({
+    queryKey: ["aggregate_repos"],
+    queryFn: getAggregateRepos,
     staleTime: 5_000,
     retry: false,
   });
@@ -67,19 +72,19 @@ export function useSetupStatus(): SetupStatus {
   });
 
   const gitAiInstalled = gitAiQ.data?.[0] === true;
-  const repoSelected = !!repoQ.data;
+  const repoAdded = (aggregateQ.data ?? []).some((e) => e.valid);
   const hasConfiguredHook = diagQ.data?.agents?.some((a) => a.detected && a.configured) ?? false;
 
-  const checklist: SetupChecklist = { gitAiInstalled, repoSelected, hasConfiguredHook };
-  const incomplete = !gitAiInstalled || !repoSelected || !hasConfiguredHook;
-  const loading = gitAiQ.isLoading || repoQ.isLoading || diagQ.isLoading;
+  const checklist: SetupChecklist = { gitAiInstalled, repoAdded, hasConfiguredHook };
+  const incomplete = !gitAiInstalled || !repoAdded || !hasConfiguredHook;
+  const loading = gitAiQ.isLoading || aggregateQ.isLoading || diagQ.isLoading;
 
   let level: StatusLevel;
   if (loading) {
     level = "muted";
   } else if (!incomplete) {
     level = "ok";
-  } else if (!gitAiInstalled && !repoSelected) {
+  } else if (!gitAiInstalled && !repoAdded) {
     level = "muted";
   } else {
     level = "warn";

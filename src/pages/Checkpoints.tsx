@@ -95,7 +95,7 @@ export default function CheckpointsPage() {
         description={t(`checkpoints.degraded.${rk}.description` as never)}
         ctaLabel={ctaKey}
         onCta={target ? () => router.navigate(target) : undefined}
-        tone="amber"
+        tone="warn"
       />
     );
   }

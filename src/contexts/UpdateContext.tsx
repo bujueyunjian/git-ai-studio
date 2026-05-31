@@ -2,6 +2,9 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { UpdateInfo, UpdateHandle } from "../lib/updater";
 import { checkForUpdate } from "../lib/updater";
 
+/** 并发检查的哨兵错误信息;checkUpdate 抛出,消费方据此区分"正在检查"而非"检查失败"。 */
+export const ALREADY_CHECKING = "ALREADY_CHECKING";
+
 interface UpdateContextValue {
   // 更新状态
   hasUpdate: boolean;
@@ -43,7 +46,9 @@ export function UpdateProvider({ children }: { children: React.ReactNode }) {
   const isCheckingRef = useRef(false);
 
   const checkUpdate = useCallback(async () => {
-    if (isCheckingRef.current) return false;
+    // 已有检查在飞行中:不要静默 return false —— 上层会误报"已是最新"。
+    // 抛哨兵错误,让调用方提示"正在检查"。
+    if (isCheckingRef.current) throw new Error(ALREADY_CHECKING);
     isCheckingRef.current = true;
     setIsChecking(true);
     setError(null);

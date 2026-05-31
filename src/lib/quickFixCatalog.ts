@@ -175,22 +175,6 @@ export const QUICK_FIX_CATALOG: readonly QuickFixEntry[] = [
     },
     cta: { label: "前往 Hooks 修复", route: "hooks" },
   },
-
-  // ----- 5. git shim 未生效(PATH 顺序错):commit 不会触发归因 -----
-  {
-    id: "git-shim-not-effective",
-    severity: "err",
-    title: "git 代理 shim 未生效",
-    problem:
-      "git 命令首先解析到的不是 git-ai 安装的代理 shim。commit 不会触发归因 hook,所有 stats 都会是 0。通常是 PATH 顺序问题,重装 git-ai 会自动修。",
-    detect: (ctx) => {
-      const d = ctx.diagnostic;
-      if (!d) return false;
-      if (d.degraded?.kind === "git_ai_not_found") return false;
-      return d.shim.resolved_paths.length > 0 && !d.shim.first_is_shim;
-    },
-    cta: { label: "前往重装", route: "install" },
-  },
 ] as const;
 
 /**

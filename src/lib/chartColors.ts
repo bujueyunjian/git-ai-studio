@@ -1,11 +1,11 @@
 // 3 桶 AI 归因的语义配色,对齐 git-ai 上游 stats.rs:114 的 human / unknown / ai_additions 口径。
-// ai 桶取品牌蓝,与 App.css 的 --primary、StatsBar 的 bg-primary、Dashboard 趋势图 text-primary 同步;
-// Blame 行级视图(BlameCodeView)通过 bucketColor 取 hex 标记 AI 行(Recharts/CodeMirror 不解析 CSS var,故按主题给出 hex)。
+// 这是 App.css 语义 token --ai/--human/--unknown 的 hex 镜像:Recharts/CodeMirror/canvas 不解析
+// CSS var,故按主题给出 hex。**改值时必须与 App.css 的 --ai/--human/--unknown 同步**(T1)。
 
 export const STATS_BUCKET_COLORS = {
-  human: { light: "#10b981", dark: "#34d399" }, // emerald
-  unknown: { light: "#94a3b8", dark: "#cbd5e1" }, // slate
-  ai: { light: "#3b82f6", dark: "#60a5fa" }, // 品牌蓝(blue-500 / blue-400),须与 --primary 同步
+  human: { light: "#10b981", dark: "#34d399" }, // = --human(翡翠绿)
+  unknown: { light: "#94a3b8", dark: "#cbd5e1" }, // = --unknown(中性灰)
+  ai: { light: "#3b82f6", dark: "#60a5fa" }, // = --ai(科技蓝)
 } as const;
 
 /** Recharts 用到的"中性色"集中表(grid/axis/tooltip 框):避免散落 hex 在 chart 组件里。 */

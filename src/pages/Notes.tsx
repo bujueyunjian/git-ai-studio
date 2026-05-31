@@ -107,7 +107,7 @@ export default function NotesPage() {
         description={t("notes.degraded.noNotesInRepo.description")}
         ctaLabel={t("notes.degraded.noNotesInRepo.cta")}
         onCta={() => router.navigate("hooks")}
-        tone="amber"
+        tone="warn"
       />
     );
   }

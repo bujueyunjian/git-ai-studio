@@ -3,11 +3,9 @@
 // # 权威口径
 // - lines key 格式:`"13"` 或 `"15-25"`(end inclusive),与上游 blame.rs:1338-1372 group 算法对齐
 // - tool::model 拼接(stats.rs:470)
-// - 文件树 helper:模糊匹配 + buildTree 排序
 
 import { describe, expect, it } from "vitest";
 
-import { buildTree, fuzzyMatch } from "../components/BlameFileTree.helpers";
 import type { BlamePayload } from "../lib/types";
 
 /** 前端期望:把 BlamePayload.lines 展开为 line_no → prompt_id 扁平 map(与后端 expand_line_index 同口径)。 */
@@ -96,54 +94,5 @@ describe("blame / tool::model 拼接(P5 grounded 修正)", () => {
     const display = `${agentId.tool}::${agentId.model}`;
     expect(display).toBe("claude_code::claude-sonnet-4-5-20250929");
     expect(display).not.toContain("/");
-  });
-});
-
-describe("blame / fuzzyMatch", () => {
-  it("空 needle 永远命中", () => {
-    expect(fuzzyMatch("anything", "")).toBe(true);
-  });
-  it("按序匹配,case insensitive", () => {
-    expect(fuzzyMatch("src/components/Foo.tsx", "scf")).toBe(true);
-    expect(fuzzyMatch("src/lib/api.ts", "lib")).toBe(true);
-    expect(fuzzyMatch("README.md", "READ")).toBe(true);
-  });
-  it("乱序不匹配", () => {
-    expect(fuzzyMatch("abc", "ba")).toBe(false);
-  });
-  it("缺字符不匹配", () => {
-    expect(fuzzyMatch("abc", "abcd")).toBe(false);
-  });
-});
-
-describe("blame / buildTree 排序与结构", () => {
-  it("空数组 → 空树", () => {
-    const t = buildTree([]);
-    expect(t.children).toEqual([]);
-  });
-
-  it("文件 + 目录混合,目录优先", () => {
-    const t = buildTree(["README.md", "src/lib/api.ts", "src/main.tsx", "Cargo.toml"]);
-    const names = t.children!.map((c) => c.name);
-    // src(目录)在前,Cargo.toml / README.md(文件)按字典序在后
-    expect(names[0]).toBe("src");
-    expect(names.slice(1)).toEqual(["Cargo.toml", "README.md"]);
-  });
-
-  it("嵌套深度", () => {
-    const t = buildTree(["a/b/c/d.txt"]);
-    const a = t.children![0];
-    expect(a.name).toBe("a");
-    expect(a.fullPath).toBe("a");
-    expect(a.children![0].fullPath).toBe("a/b");
-    expect(a.children![0].children![0].fullPath).toBe("a/b/c");
-    const d = a.children![0].children![0].children![0];
-    expect(d.name).toBe("d.txt");
-    expect(d.children).toBeUndefined(); // 叶子
-  });
-
-  it("同目录下重复 path 不重复挂载", () => {
-    const t = buildTree(["a/x.txt", "a/y.txt", "a/x.txt"]);
-    expect(t.children![0].children!.length).toBe(2);
   });
 });

@@ -78,8 +78,11 @@ pub fn locate_git_dir(repo_root: &Path) -> Option<PathBuf> {
     None
 }
 
-/// 数 `.git/ai/working_logs/<head_sha>/*.jsonl` 的数量。
-/// 这是判定"当前 HEAD 是否曾产生过 checkpoint"的关键指标。
+/// 数 `.git/ai/working_logs/<head_sha>/checkpoints.jsonl` 里的**有效 checkpoint 条数**。
+///
+/// 上游每个 `<sha>/` 目录只有一个 `checkpoints.jsonl`,N 个 checkpoint = 文件内 N 行 —— 所以必须
+/// 数**行数**而非文件数(数文件恒为 0/1,会把真实活动量严重低估成"最多 1 个")。计数口径
+/// (跳空行 + api_version 过滤)与 Checkpoints 页的 [`crate::repo::working_logs::count_valid_lines`] 一致。
 pub fn working_logs_count(repo_root: &Path, head_sha: Option<&str>) -> u32 {
     let Some(git_dir) = locate_git_dir(repo_root) else {
         return 0;
@@ -88,17 +91,18 @@ pub fn working_logs_count(repo_root: &Path, head_sha: Option<&str>) -> u32 {
     if !ai_dir.is_dir() {
         return 0;
     }
-    // 优先按 head_sha 子目录数;若 head_sha 未知,统计全量 jsonl
+    // 优先数当前 HEAD 子目录的 checkpoint 条数;head_sha 未知时,汇总全量 .jsonl 的条数。
     if let Some(sha) = head_sha {
         let sub = ai_dir.join(sha);
         if sub.is_dir() {
-            return count_jsonl(&sub);
+            return count_checkpoint_lines(&sub);
         }
     }
-    count_jsonl(&ai_dir)
+    count_checkpoint_lines(&ai_dir)
 }
 
-fn count_jsonl(dir: &Path) -> u32 {
+/// 递归累计目录树下所有 `.jsonl` 文件里的有效 checkpoint 行数。
+fn count_checkpoint_lines(dir: &Path) -> u32 {
     let mut n: u32 = 0;
     let walker = match fs::read_dir(dir) {
         Ok(w) => w,
@@ -107,9 +111,11 @@ fn count_jsonl(dir: &Path) -> u32 {
     for e in walker.flatten() {
         let p = e.path();
         if p.is_file() && p.extension().and_then(|s| s.to_str()) == Some("jsonl") {
-            n = n.saturating_add(1);
+            if let Ok(content) = fs::read_to_string(&p) {
+                n = n.saturating_add(crate::repo::working_logs::count_valid_lines(&content));
+            }
         } else if p.is_dir() {
-            n = n.saturating_add(count_jsonl(&p));
+            n = n.saturating_add(count_checkpoint_lines(&p));
         }
     }
     n

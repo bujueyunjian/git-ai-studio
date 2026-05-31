@@ -22,7 +22,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 
-import { useUpdate } from "../contexts/UpdateContext";
+import { ALREADY_CHECKING, useUpdate } from "../contexts/UpdateContext";
 import { relaunchApp, type UpdateProgressEvent } from "../lib/updater";
 import { RadioGroup, RadioItem } from "../components/ui/RadioGroupBar";
 import { Switch } from "../components/ui/SwitchToggle";
@@ -379,7 +379,8 @@ export default function SettingsPage() {
       .catch(() => setAppVersion(""));
   }, []);
 
-  const { hasUpdate, updateInfo, updateHandle, checkUpdate, resetDismiss } = useUpdate();
+  const { hasUpdate, updateInfo, updateHandle, isChecking, checkUpdate, resetDismiss } =
+    useUpdate();
   const [isDownloading, setIsDownloading] = useState(false);
   // 下载进度:已下载 / 总字节数,用于按钮上的百分比展示。
   const [downloadProgress, setDownloadProgress] = useState<{ downloaded: number; total: number }>({
@@ -421,7 +422,12 @@ export default function SettingsPage() {
         toast.success(i18n.t("update.upToDate"));
       }
     } catch (e) {
-      toast.error(i18n.t("update.checkFailed"), { description: (e as Error).message });
+      // 并发检查被哨兵拦下 → 提示"正在检查",不误报为失败。
+      if ((e as Error).message === ALREADY_CHECKING) {
+        toast.info(i18n.t("update.checkingInProgress"));
+      } else {
+        toast.error(i18n.t("update.checkFailed"), { description: (e as Error).message });
+      }
     }
   }
 
@@ -1013,19 +1019,19 @@ export default function SettingsPage() {
         <div>
           源代码:
           <a
-            href="https://github.com/bbujueyunjian-boop/git-ai-studio"
+            href="https://github.com/bujueyunjian/git-ai-studio"
             target="_blank"
             rel="noreferrer noopener"
             className="ml-1 inline-flex items-center gap-0.5 text-primary hover:underline"
           >
-            bbujueyunjian-boop/git-ai-studio <ExternalLink className="h-3 w-3" />
+            bujueyunjian/git-ai-studio <ExternalLink className="h-3 w-3" />
           </a>
         </div>
         <div className="mt-2 flex items-center gap-2">
           <button
             type="button"
             onClick={handleCheckOrInstall}
-            disabled={isDownloading}
+            disabled={isDownloading || isChecking}
             className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-foreground hover:bg-slate-50 disabled:opacity-60 dark:border-border dark:hover:bg-slate-800"
           >
             {isDownloading ? (
@@ -1034,6 +1040,11 @@ export default function SettingsPage() {
                 {downloadProgress.total > 0
                   ? i18n.t("update.downloadingPercent", { percent: downloadPercent })
                   : i18n.t("update.downloading")}
+              </>
+            ) : isChecking ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {i18n.t("update.checking")}
               </>
             ) : hasUpdate && updateInfo ? (
               <>

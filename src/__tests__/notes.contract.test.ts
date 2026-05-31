@@ -49,7 +49,6 @@ describe("NotesAuthorshipLog schema 锁", () => {
     const r: NotesPromptRecord = {
       agent_id: { tool: "claude", id: "x", model: "y" },
       human_author: null,
-      messages: [],
       total_additions: 0,
       total_deletions: 0,
       accepted_lines: 0,
@@ -135,7 +134,6 @@ describe("messages_url 可选字段", () => {
     const r: NotesPromptRecord = {
       agent_id: { tool: "claude", id: "x", model: "y" },
       human_author: null,
-      messages: [],
       total_additions: 0,
       total_deletions: 0,
       accepted_lines: 0,
@@ -148,7 +146,6 @@ describe("messages_url 可选字段", () => {
       agent_id: { tool: "claude", id: "x", model: "y" },
       human_author: null,
       messages_url: "https://example.com/conv/abc",
-      messages: [],
       total_additions: 0,
       total_deletions: 0,
       accepted_lines: 0,

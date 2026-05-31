@@ -142,6 +142,11 @@ export function deriveRates(stats: AiStats, total: number): DerivedRates {
   };
 }
 
+/** commit 级新增总行 = 三桶并列(human + unknown + ai),与上游 stats.rs:114 一致。 */
+export function commitTotal(stats: AiStats): number {
+  return stats.human_additions + stats.unknown_additions + stats.ai_additions;
+}
+
 // ============ 格式化 helper ============
 
 const integer = new Intl.NumberFormat("zh-CN");

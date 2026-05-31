@@ -48,7 +48,7 @@ const MENU_ITEMS: Array<{ action: "open-main" | "cycle-theme" | "hide"; labelKey
 ];
 
 /** 把交互意图回传主窗执行(单向数据流:pet 不直接改 state / 不操作主窗)。 */
-function sendCommand(action: "open-main" | "cycle-theme" | "hide"): void {
+function sendCommand(action: "open-main" | "cycle-theme" | "hide" | "open-diagnostic"): void {
   void emit(PET_COMMAND_EVENT, { action });
 }
 
@@ -70,6 +70,8 @@ export function InkPetWindow() {
   const pulseStartRef = useRef<number>(-Infinity);
   const lastKindRef = useRef<PetStateKind>("unknown");
   const attentionRef = useRef(0);
+  // 上次 mousedown 时间戳:手动判定双击(startDragging 会吞掉浏览器合成的 dblclick)。
+  const lastDownRef = useRef(0);
 
   // pet 窗口背景必须透明(它加载与主窗同一 index.html / App.css,默认 body 有底色)。
   useEffect(() => {
@@ -176,8 +178,21 @@ export function InkPetWindow() {
   }, []);
 
   // 无边框窗口靠在角色本体上按下来拖动整窗(菜单打开时不拖)。
-  const onPointerDown = () => {
+  //
+  // 双击检测靠两次 mousedown 间隔手动判定:canvas 一按下就 `startDragging()` 进入 OS 拖窗循环,
+  // 会吞掉浏览器合成的 `dblclick` 事件(原 `onDoubleClick` 永不触发,表现为"双击没反应")。
+  // 间隔内的第二次按下 → 当双击处理(urgent 态直达诊断,否则打开主窗),且本次不拖窗。
+  const onPointerDown = (e: React.MouseEvent) => {
     if (menuOpen) return;
+    const now = e.timeStamp;
+    if (now - lastDownRef.current < 350) {
+      lastDownRef.current = 0;
+      const s = stateRef.current;
+      const isUrgent = visualForState(s.kind, s.aiSharePercent).urgent;
+      sendCommand(isUrgent ? "open-diagnostic" : "open-main");
+      return; // 双击不触发拖窗
+    }
+    lastDownRef.current = now;
     void getCurrentWindow().startDragging();
   };
 
@@ -199,8 +214,10 @@ export function InkPetWindow() {
       }}
     >
       {showBubble && (
+        // 不换行、不截断:提示文案有限且短,字号收到 10px 后最长一条也能在窗口内放下;
+        // hover / urgent 时整条完整显示(showBubble 已含 hover)。
         <div
-          className={`pointer-events-none absolute left-1/2 top-1 z-10 max-w-[180px] -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-1 text-center text-xs font-medium shadow ${
+          className={`pointer-events-none absolute left-1/2 top-1 z-10 max-w-[260px] -translate-x-1/2 whitespace-nowrap rounded-md px-2 py-1 text-center text-[10px] font-medium leading-snug shadow ${
             urgent ? "bg-red-600/90 text-white" : "bg-black/75 text-white"
           }`}
         >
@@ -215,12 +232,14 @@ export function InkPetWindow() {
       )}
 
       {menuOpen && (
-        <div className="absolute left-1/2 top-1 z-20 -translate-x-1/2 overflow-hidden rounded-md border border-black/10 bg-white text-xs shadow-lg dark:border-white/10 dark:bg-neutral-800">
+        // w-max + whitespace-nowrap:菜单按内容自然宽度单行排布,不被 `left-1/2` 挤成半窗宽而折行
+        // (与上方气泡同款处理);窗口最窄 140px 也能容下最长一项「显示主窗口」。
+        <div className="absolute left-1/2 top-1 z-20 w-max -translate-x-1/2 overflow-hidden rounded-md border border-black/10 bg-white text-xs shadow-lg dark:border-white/10 dark:bg-neutral-800">
           {MENU_ITEMS.map((item) => (
             <button
               key={item.action}
               type="button"
-              className="block w-full px-3 py-1.5 text-left text-neutral-700 hover:bg-black/5 dark:text-neutral-200 dark:hover:bg-white/10"
+              className="block w-full whitespace-nowrap px-3 py-1.5 text-left text-neutral-700 hover:bg-black/5 dark:text-neutral-200 dark:hover:bg-white/10"
               onClick={() => {
                 sendCommand(item.action);
                 setMenuOpen(false);
@@ -235,7 +254,6 @@ export function InkPetWindow() {
       <canvas
         ref={canvasRef}
         onMouseDown={onPointerDown}
-        onDoubleClick={() => sendCommand("open-main")}
         style={{ opacity: bubbleState.opacity }}
         className="h-full w-full cursor-grab active:cursor-grabbing"
       />

@@ -18,10 +18,13 @@ import {
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
-  Eye,
+  ChevronRight,
+  FolderGit2,
   FolderOpen,
+  Info,
   ListTodo,
   Loader2,
+  Plus,
   RefreshCw,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -39,31 +42,36 @@ import {
 import { EmptyState } from "../components/EmptyState";
 import { FormulaPopover } from "../components/FormulaPopover";
 import { OnboardingCard } from "../components/OnboardingCard";
+import { ScopeToggle } from "../components/ScopeToggle";
+import { WORKING_DIR_SHA_TOKEN } from "../components/WorkingDirSummary";
 import { TimeRangePicker } from "../components/TimeRangePicker";
-import { WorkingDirSummary } from "../components/WorkingDirSummary";
 import { axisDefaultProps, CHART_COLORS } from "../components/charts/theme";
-import { currentRepo, getHistory, getRangeSummary } from "../lib/api";
+import {
+  currentRepo as currentRepoApi,
+  getAggregateHistory,
+  getAggregateRepos,
+  getAggregateWorkingStatus,
+  selectRepo,
+  setAggregateRepos,
+} from "../lib/api";
 import { formatInt, formatPercent, formatRelativeFromNow } from "../lib/formulas";
-import { rangeKey } from "../lib/queryKeys";
+import { rangeKey, reposKey } from "../lib/queryKeys";
+import { rollupBuckets, type Granularity } from "../lib/rollup";
 import type {
+  AggregateHistoryPayload,
+  AggregateHistoryResult,
+  AggregatePerCommit,
+  AggregateWorkingStatusPayload,
+  AggregateWorkingStatusResult,
   DailyBucket,
-  HistoryPayload,
-  HistoryResult,
-  PerCommitStat,
-  RangeAuthorshipStatsData,
-  RangeSummaryResult,
   TimeRange,
 } from "../lib/types";
-import { useRouter } from "../router";
+import { useRepoChanged } from "../lib/useRepoChanged";
+import { useRouter, type RouteId } from "../router";
 
 /** dashboard 缓存过期时间(秒),对齐后端 SQLite 缓存策略。 */
 const DASHBOARD_STALE_TIME_SECONDS = 30;
 const STALE_TIME_MS = DASHBOARD_STALE_TIME_SECONDS * 1000;
-/**
- * hook 覆盖率 query 的 staleTime —— range 聚合固有耗时长(可达 50s+),且仓库级数据变化慢,
- * 用 5min 避免切窗口/刷新时频繁触发重算。比主体 30s 缓存长一个量级。
- */
-const RANGE_SUMMARY_STALE_TIME_MS = 5 * 60 * 1000;
 const DEFAULT_RANGE: TimeRange = { kind: "this_week" };
 /** Recent commits 表格上限 — 超过的 commit 提示有"更多"。 */
 const RECENT_LIMIT = 12;
@@ -73,57 +81,81 @@ export default function DashboardPage() {
   const router = useRouter();
   const qc = useQueryClient();
   const [range, setRange] = useState<TimeRange>(DEFAULT_RANGE);
+  // 「只看我」口径:默认 true(单开发者本机工具的本分),后端逐仓按 git user.email 过滤。
+  // 进 queryKey ⇒ 切换会重取(stats 缓存按 sha,与作者无关,故命中快)。
+  const [onlyMine, setOnlyMine] = useState(true);
+  // 日/周/月 粒度:纯前端对 daily_buckets 做 rollup,**不进 queryKey、不触发取数**(M3/M4)。
+  const [granularity, setGranularity] = useState<Granularity>("day");
   const [now, setNow] = useState(Date.now());
+  const handleRepoChanged = useRepoChanged();
 
-  // 当前仓库 path —— 进 queryKey 防"切仓库串数据"(评审 B bug A)。
-  // null = 未选仓库,Query 仍跑,后端会返 degraded.repo_missing。
-  const repoQ = useQuery({
-    queryKey: ["current_repo_path"],
-    queryFn: () => currentRepo(),
+  // 跨仓聚合数据源 = 用户显式勾选的仓库集(M1 aggregate_repos)。与下钻焦点 current_repo 正交。
+  const aggregateReposQ = useQuery({
+    queryKey: ["aggregate_repos"],
+    queryFn: getAggregateRepos,
     staleTime: STALE_TIME_MS,
   });
-  const repoPath = repoQ.data?.path ?? null;
-  const repoName = repoQ.data?.name ?? null;
+  const included = useMemo(
+    () => (aggregateReposQ.data ?? []).filter((r) => r.valid).map((r) => r.path),
+    [aggregateReposQ.data],
+  );
+  const reposK = reposKey(included);
 
-  const historyQ = useQuery<HistoryResult>({
-    queryKey: ["history", repoPath, rangeKey(range)],
-    queryFn: () => getHistory(range),
+  // 当前下钻仓库(与聚合集正交)。用于"搭桥":若你正在看的仓不在 Dashboard 聚合集里,
+  // 提示并给一键加入 —— 解决"提交归因页有数据、Dashboard 却没有"的认知断层。
+  const currentRepoQ = useQuery({
+    queryKey: ["current_repo"],
+    queryFn: currentRepoApi,
     staleTime: STALE_TIME_MS,
-    // keepPreviousData,但**仅在同一 repoPath 内**生效 —— 切窗口不闪烁,切仓库立即清空。
-    // 不加 repoPath 判断时,切仓后会把上一仓库的曲线短暂喂给新仓库 UI,数字不对很扎眼。
-    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === repoPath ? prev : undefined),
+  });
+  const currentPath = currentRepoQ.data?.path ?? null;
+  const currentName = currentRepoQ.data?.name ?? null;
+  const allAggregatePaths = useMemo(
+    () => (aggregateReposQ.data ?? []).map((r) => r.path),
+    [aggregateReposQ.data],
+  );
+  const currentInAggregate =
+    !!currentPath && allAggregatePaths.some((p) => p.toLowerCase() === currentPath.toLowerCase());
+  const addCurrentToAggregate = () => {
+    if (!currentPath) return;
+    setAggregateRepos([...allAggregatePaths, currentPath])
+      .then(() => {
+        qc.invalidateQueries({ queryKey: ["aggregate_repos"] });
+        qc.invalidateQueries({ queryKey: ["history_agg"] });
+        qc.invalidateQueries({ queryKey: ["working_agg"] });
+      })
+      .catch(() => {});
+  };
+
+  const historyQ = useQuery<AggregateHistoryResult>({
+    queryKey: ["history_agg", reposK, rangeKey(range), onlyMine],
+    queryFn: () => getAggregateHistory(range, onlyMine),
+    enabled: aggregateReposQ.isSuccess && included.length > 0,
+    staleTime: STALE_TIME_MS,
+    // 切勾选集立即清空占位,切窗口/口径保留(同一 reposKey 才复用)。
+    placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === reposK ? prev : undefined),
   });
 
-  // 环比基准:上一同长度窗口。仅在主 query 拿到 payload 后再请求,避免空窗口 / degraded 时白白多打一次。
+  // 环比基准:上一同长度窗口(跨仓集合固定,可推)。仅在主 query 拿到 payload 后再请求。
   const prevRange = useMemo(() => derivePrevRange(range), [range]);
-  const prevHistoryQ = useQuery<HistoryResult>({
-    queryKey: ["history_prev", repoPath, rangeKey(prevRange)],
-    queryFn: () => getHistory(prevRange),
+  const prevHistoryQ = useQuery<AggregateHistoryResult>({
+    queryKey: ["history_agg", reposK, rangeKey(prevRange), onlyMine],
+    queryFn: () => getAggregateHistory(prevRange, onlyMine),
     enabled: historyQ.data?.status === "ok",
     staleTime: STALE_TIME_MS,
   });
 
-  // hook 覆盖率独立 query:固有耗时长(可达 50s+),与主体解耦 —— 它的 loading / error /
-  // degraded 只影响覆盖率卡 + 缺 hook 列表,绝不连累 AI 占比 / 趋势图 / 提交表的即时渲染。
-  // 仅当主 query 拿到非空窗口后才请求,避免空窗口 / degraded 时白白多打一次。
-  const windowHasCommits =
-    historyQ.data?.status === "ok" && historyQ.data.payload.total_commits_in_window > 0;
-  const rangeSummaryQ = useQuery<RangeSummaryResult>({
-    queryKey: ["range_summary", repoPath, rangeKey(range)],
-    queryFn: () => getRangeSummary(range),
-    enabled: windowHasCommits,
-    staleTime: RANGE_SUMMARY_STALE_TIME_MS,
-    // range stats 固有耗时长(可达 50s+),自动重试只会让用户白等双倍时间;
-    // 覆盖率卡自带手动「重试」按钮,失败交给用户主动触发。对齐 useSetupStatus 慢 query 的 retry:false。
-    retry: false,
-    // 守卫同时比对 repoPath(queryKey[1])与 rangeKey(queryKey[2]):
-    // 覆盖率/缺-hook 列表是 range 强相关精确值,切时间窗口时绝不能把上一窗口的值当占位,
-    // 否则会短暂显示不属于当前 range 的"9/12"。仅同仓库 + 同窗口才保留占位。
-    placeholderData: (prev, prevQuery) =>
-      prevQuery?.queryKey[1] === repoPath && prevQuery?.queryKey[2] === rangeKey(range)
-        ? prev
-        : undefined,
+  // 「本地未提交」快照:跨选中仓现读 git ai status。只在窗口含"现在"时取(已结束区间配"当前未提交"没意义)。
+  // 不进 onlyMine/range queryKey:工作树天然只看我、与窗口正交;reposK 进 key 防切聚合集串数据。
+  const showWorking = rangeIncludesNow(range);
+  const workingQ = useQuery<AggregateWorkingStatusResult>({
+    queryKey: ["working_agg", reposK],
+    queryFn: getAggregateWorkingStatus,
+    enabled: aggregateReposQ.isSuccess && included.length > 0 && showWorking,
+    staleTime: STALE_TIME_MS,
   });
+  const workingPayload: AggregateWorkingStatusPayload | null =
+    workingQ.data?.status === "ok" ? workingQ.data.payload : null;
 
   // 5s tick(原 10s 会让"N 秒前"卡顿)+ visibilitychange(后台切回前台立刻更新)。
   useEffect(() => {
@@ -139,40 +171,70 @@ export default function DashboardPage() {
   }, []);
 
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: ["history", repoPath, rangeKey(range)] });
-    qc.invalidateQueries({ queryKey: ["history_prev", repoPath, rangeKey(prevRange)] });
-    qc.invalidateQueries({ queryKey: ["range_summary", repoPath, rangeKey(range)] });
-    qc.invalidateQueries({ queryKey: ["current_repo_path"] });
+    qc.invalidateQueries({ queryKey: ["history_agg", reposK, rangeKey(range), onlyMine] });
+    qc.invalidateQueries({ queryKey: ["history_agg", reposK, rangeKey(prevRange), onlyMine] });
+    qc.invalidateQueries({ queryKey: ["working_agg", reposK] });
+    qc.invalidateQueries({ queryKey: ["aggregate_repos"] });
   };
 
-  // ===== degraded =====
-  // 缺仓库 / 缺 git-ai 正是 onboarding 最该出现的时刻:在空态上方叠一张引导卡,
-  // 用 Setup 容器收口环境配置,而非直接把用户甩去单页 repo/install。
+  // 跨仓 per_commit 带 repo_path:点某条 commit 先把它的仓设为下钻焦点,再跳提交归因页。
+  const drillToCommit = (sha: string, repoPath: string) => {
+    selectRepo(repoPath)
+      .then(() => {
+        handleRepoChanged();
+        router.navigate("stats", sha);
+      })
+      .catch(() => router.navigate("stats", sha));
+  };
+  // 按仓分解表点某仓:设为下钻焦点并进提交归因页(HEAD)。
+  const drillToRepo = (repoPath: string) => {
+    selectRepo(repoPath)
+      .then(() => {
+        handleRepoChanged();
+        router.navigate("stats");
+      })
+      .catch(() => router.navigate("stats"));
+  };
+  // 未提交卡点某仓:设为当前仓并直接进该仓的「工作树未提交」视图。
+  const drillToWorking = (repoPath: string) => {
+    selectRepo(repoPath)
+      .then(() => {
+        handleRepoChanged();
+        router.navigate("stats", WORKING_DIR_SHA_TOKEN);
+      })
+      .catch(() => router.navigate("stats", WORKING_DIR_SHA_TOKEN));
+  };
+
+  // ===== 未勾选任何仓库:专属空态(引导去 Repo 页勾选)=====
+  if (aggregateReposQ.isSuccess && included.length === 0) {
+    return <NoReposSelected onNavigate={(r) => router.navigate(r)} />;
+  }
+
+  // ===== degraded(git-ai 缺失;no_repos_selected 后端也会返,统一引导去勾选)=====
   if (historyQ.data?.status === "degraded") {
     const kind = historyQ.data.reason.kind;
-    const keyPrefix =
-      kind === "repo_missing"
-        ? "dashboard.degraded.repoMissing"
-        : "dashboard.degraded.gitAiMissing";
+    if (kind === "no_repos_selected") {
+      return <NoReposSelected onNavigate={(r) => router.navigate(r)} />;
+    }
     return (
       <div className="mx-auto max-w-[1100px] space-y-6 px-8 py-8">
         <OnboardingCard onNavigate={(r) => router.navigate(r)} />
         <EmptyState
-          Icon={kind === "repo_missing" ? FolderOpen : Activity}
-          title={t(`${keyPrefix}.title`)}
-          description={t(`${keyPrefix}.description`)}
-          ctaLabel={t(`${keyPrefix}.cta`)}
-          onCta={() => router.navigate(kind === "repo_missing" ? "repo" : "install")}
+          Icon={Activity}
+          title={t("dashboard.degraded.gitAiMissing.title")}
+          description={t("dashboard.degraded.gitAiMissing.description")}
+          ctaLabel={t("dashboard.degraded.gitAiMissing.cta")}
+          onCta={() => router.navigate("install")}
         />
       </div>
     );
   }
 
-  if (historyQ.isLoading && !historyQ.data) {
+  if ((historyQ.isLoading || !aggregateReposQ.isSuccess) && !historyQ.data) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-        正在聚合历史 stats…
+        {t("dashboard.aggregating", { n: included.length })}
       </div>
     );
   }
@@ -180,18 +242,18 @@ export default function DashboardPage() {
   if (historyQ.isError) {
     return (
       <div className="p-8">
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-          聚合失败:{(historyQ.error as Error).message}
+        <div className="rounded-xl border border-danger bg-danger-muted p-4 text-sm text-danger">
+          {t("dashboard.aggregateFailed", { msg: (historyQ.error as Error).message })}
         </div>
       </div>
     );
   }
 
-  const payload: HistoryPayload | null =
+  const payload: AggregateHistoryPayload | null =
     historyQ.data?.status === "ok" ? historyQ.data.payload : null;
   if (!payload) return null;
 
-  const prevPayload: HistoryPayload | null =
+  const prevPayload: AggregateHistoryPayload | null =
     prevHistoryQ.data?.status === "ok" ? prevHistoryQ.data.payload : null;
 
   const aiShareCurrent = computeWindowAiShare(payload.per_commit);
@@ -200,40 +262,55 @@ export default function DashboardPage() {
     aiShareCurrent != null && aiSharePrev != null ? aiShareCurrent - aiSharePrev : null;
 
   const windowAiTotal = payload.per_commit.reduce((acc, c) => acc + c.stats.ai_additions, 0);
-
-  // hook 覆盖率视图模型:由独立的 rangeSummaryQ 驱动。区分 loading / error / 数据三态,
-  // 让覆盖率卡自己显示转圈 / 重试,不影响整页其它指标。
-  const rangeSummaryData =
-    rangeSummaryQ.data?.status === "ok" ? rangeSummaryQ.data.range_summary : null;
-  const authorshipStats = rangeSummaryData?.authorship_stats ?? null;
-  const hookCoverage =
-    authorshipStats && authorshipStats.total_commits > 0
-      ? authorshipStats.commits_with_authorship / authorshipStats.total_commits
-      : null;
-  const hookCoverageDetail = authorshipStats
-    ? `${authorshipStats.commits_with_authorship} / ${authorshipStats.total_commits}`
-    : null;
+  // granularity 纯前端 rollup(O(n);**不进 queryKey** ⇒ 切日/周/月不触发取数)。
+  const rolledBuckets = rollupBuckets(payload.daily_buckets, granularity);
 
   return (
     <div className="mx-auto max-w-[1100px] space-y-10 px-8 py-8 animate-in fade-in duration-200">
       <Header
-        repoName={repoName}
+        repoCount={included.length}
         range={range}
         onChangeRange={setRange}
+        onlyMine={onlyMine}
+        onChangeOnlyMine={setOnlyMine}
         isFetching={historyQ.isFetching || prevHistoryQ.isFetching}
         onRefresh={refresh}
+        onManageRepos={() => router.navigate("repo")}
       />
 
       <OnboardingCard onNavigate={(r) => router.navigate(r)} />
 
+      {/* 搭桥:你当前下钻的仓不在 Dashboard 聚合集时,显式说明 + 一键加入 ——
+          否则会困惑"提交归因页(看当前仓)有数据,Dashboard(看聚合集)却没有"。 */}
+      {currentName && !currentInAggregate && (
+        <CurrentRepoNotInAggregateBanner repoName={currentName} onAdd={addCurrentToAggregate} />
+      )}
+
+      {/* 失败诚实性:失败仓 / 截断仓 / 失败 commit 显式列出,聚合数绝不把它们当 0 并入。 */}
+      {payload.failed_repos.length > 0 && (
+        <InlineBanner
+          kind="warn"
+          text={t("dashboard.failedReposHint", { n: payload.failed_repos.length })}
+        />
+      )}
+      {payload.truncated_repos.length > 0 && (
+        <InlineBanner
+          kind="warn"
+          text={t("dashboard.truncatedReposHint", { n: payload.truncated_repos.length })}
+        />
+      )}
       {payload.failed_shas.length > 0 && (
         <InlineBanner
           kind="warn"
           text={t("dashboard.failedHint", { n: payload.failed_shas.length })}
         />
       )}
-      {payload.truncated && (
-        <InlineBanner kind="warn" text={t("dashboard.truncatedHint", { cap: 500 })} />
+
+      {/* 本地未提交快照:与时间窗口正交的"现在"卡,委员会决策为独立呈现、不折进窗口指标。
+          只要窗口含"现在"且数据就绪就常驻(有改动显示数字、无改动显示"无未提交改动"),
+          以便用户始终能发现该入口;即使本窗口已提交为 0(空窗口)也照常显示。 */}
+      {showWorking && workingPayload && (
+        <WorkingUncommittedCard payload={workingPayload} onDrill={drillToWorking} />
       )}
 
       {payload.total_commits_in_window === 0 ? (
@@ -248,28 +325,19 @@ export default function DashboardPage() {
             aiShareDelta={aiShareDelta}
             windowAiTotal={windowAiTotal}
             commitCount={payload.total_commits_in_window}
-            hookCoverage={hookCoverage}
-            hookCoverageDetail={hookCoverageDetail}
-            hookCoverageLoading={rangeSummaryQ.isLoading}
-            hookCoverageError={
-              rangeSummaryQ.isError ? (rangeSummaryQ.error as Error).message : null
-            }
-            onRetryHookCoverage={() => rangeSummaryQ.refetch()}
-            onJumpHooks={() => router.navigate("hooks")}
           />
 
-          <WindowAiChart daily={payload.daily_buckets} />
-
-          <RecentCommitsTable
-            commits={payload.per_commit}
-            onPickSha={(sha) => router.navigate("stats", sha)}
+          <WindowAiChart
+            daily={rolledBuckets}
+            granularity={granularity}
+            onChangeGranularity={setGranularity}
           />
 
-          {authorshipStats && <MissingHookList payload={authorshipStats} />}
+          <RepoBreakdownTable perCommit={payload.per_commit} onDrill={drillToRepo} />
+
+          <RecentCommitsTable commits={payload.per_commit} onPick={drillToCommit} />
         </>
       )}
-
-      <WorkingDirSummary repoPath={repoPath} jumpTo="stats" refetchMs={10_000} />
 
       <RawDataLinks onViewCheckpoints={() => router.navigate("checkpoints")} />
 
@@ -278,7 +346,6 @@ export default function DashboardPage() {
         now={now}
         cacheHits={payload.cache_hits}
         totalInWindow={payload.total_commits_in_window}
-        cachedRepoTotal={payload.cached_repo_total}
       />
     </div>
   );
@@ -287,34 +354,53 @@ export default function DashboardPage() {
 // ============ Header ============
 
 function Header({
-  repoName,
+  repoCount,
   range,
   onChangeRange,
+  onlyMine,
+  onChangeOnlyMine,
   isFetching,
   onRefresh,
+  onManageRepos,
 }: {
-  repoName: string | null;
+  repoCount: number;
   range: TimeRange;
   onChangeRange: (next: TimeRange) => void;
+  onlyMine: boolean;
+  onChangeOnlyMine: (v: boolean) => void;
   isFetching: boolean;
   onRefresh: () => void;
+  onManageRepos: () => void;
 }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {repoName ? (
-            <span className="truncate">{repoName}</span>
-          ) : (
-            <span className="italic">未选仓库</span>
-          )}
-          <span className="mx-1.5 text-muted-foreground/40">·</span>
-          本机解析,不上传
+        {/* 聚合范围做成可点 chip(仓库图标 + chevron),一眼可辨"可点去管理";不再和右上角
+            「只看我/全部」开关重复(那条已删),隐私提示退为纯文本 —— 三类信息层次分明。 */}
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <button
+            type="button"
+            onClick={onManageRepos}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <FolderGit2 className="h-3 w-3 text-muted-foreground" />
+            {t("dashboard.aggregateScope", { n: repoCount })}
+            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+          </button>
+          <span className="text-muted-foreground/40">·</span>
+          <span>本机解析,不上传</span>
+        </div>
+        {/* 数据怎么统计的一行说明:点各指标 / 区块标题旁的 ⓘ 看完整公式与口径。 */}
+        <p className="mt-1 max-w-2xl text-[11px] leading-relaxed text-muted-foreground">
+          {t("dashboard.dataHint")}
         </p>
       </div>
+      {/* 顶部工具栏只留两个正交维度 + 刷新:口径(谁)/ 时间范围(看多长)。
+          图表粒度(按天/周/月)从属于时间轴,已下沉到折线图自己的标题行,不在这里争视觉。 */}
       <div className="flex items-center gap-2">
+        <ScopeToggle onlyMine={onlyMine} onChange={onChangeOnlyMine} />
         <TimeRangePicker value={range} onChange={onChangeRange} />
         <button
           type="button"
@@ -331,6 +417,212 @@ function Header({
   );
 }
 
+/** 日/周/月 segmented control。切换只触发前端 rollup,不重取数。 */
+function GranularityToggle({
+  value,
+  onChange,
+}: {
+  value: Granularity;
+  onChange: (g: Granularity) => void;
+}) {
+  const { t } = useTranslation();
+  const opts: Array<{ k: Granularity; label: string }> = [
+    { k: "day", label: t("dashboard.granularity.day") },
+    { k: "week", label: t("dashboard.granularity.week") },
+    { k: "month", label: t("dashboard.granularity.month") },
+  ];
+  return (
+    <div className="inline-flex h-8 items-center rounded-md border border-border p-0.5 text-xs">
+      {opts.map((o) => (
+        <button
+          key={o.k}
+          type="button"
+          onClick={() => onChange(o.k)}
+          className={`rounded-sm px-2 py-1 transition-colors duration-150 ${
+            value === o.k
+              ? "bg-muted font-medium text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** 未勾选任何聚合仓库的专属空态:引导去 Repo 页勾选(NoReposSelected degraded 与客户端空集共用)。 */
+function NoReposSelected({ onNavigate }: { onNavigate: (r: RouteId) => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="mx-auto max-w-[1100px] space-y-6 px-8 py-8">
+      <OnboardingCard onNavigate={onNavigate} />
+      <EmptyState
+        Icon={FolderOpen}
+        title={t("dashboard.degraded.noReposSelected.title")}
+        description={t("dashboard.degraded.noReposSelected.description")}
+        ctaLabel={t("dashboard.degraded.noReposSelected.cta")}
+        onCta={() => onNavigate("repo")}
+      />
+    </div>
+  );
+}
+
+/** 按仓库分解小计:跨仓聚合下"哪个仓贡献多"。单仓时不渲染(无分解意义)。点行 → 下钻该仓。 */
+function RepoBreakdownTable({
+  perCommit,
+  onDrill,
+}: {
+  perCommit: AggregatePerCommit[];
+  onDrill: (repoPath: string) => void;
+}) {
+  const { t } = useTranslation();
+  const rows = useMemo(() => {
+    const map = new Map<string, { ai: number; total: number; commits: number }>();
+    for (const c of perCommit) {
+      const e = map.get(c.repo_path) ?? { ai: 0, total: 0, commits: 0 };
+      e.ai += c.stats.ai_additions;
+      e.total += c.stats.human_additions + c.stats.unknown_additions + c.stats.ai_additions;
+      e.commits += 1;
+      map.set(c.repo_path, e);
+    }
+    return [...map.entries()]
+      .map(([repoPath, v]) => ({ repoPath, ...v, share: v.total > 0 ? v.ai / v.total : null }))
+      .sort((a, b) => b.ai - a.ai);
+  }, [perCommit]);
+  if (rows.length <= 1) return null;
+  return (
+    <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <h2 className="flex items-center gap-1 text-sm font-medium text-foreground">
+        {t("dashboard.repoBreakdown.title")}
+        <FormulaPopover metricId="ai_share" />
+      </h2>
+      <div className="overflow-hidden rounded-xl border border-border">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <th className="px-3 py-2 text-left font-medium">
+                {t("dashboard.repoBreakdown.repo")}
+              </th>
+              <th className="w-[80px] px-3 py-2 text-right font-medium">
+                {t("dashboard.repoBreakdown.aiShare")}
+              </th>
+              <th className="w-[80px] px-3 py-2 text-right font-medium">
+                {t("dashboard.repoBreakdown.aiLines")}
+              </th>
+              <th className="w-[80px] px-3 py-2 text-right font-medium">
+                {t("dashboard.repoBreakdown.commits")}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={r.repoPath}
+                onClick={() => onDrill(r.repoPath)}
+                className="group cursor-pointer border-t border-border/60 transition-colors duration-150 hover:bg-primary/5 first:border-t-0"
+              >
+                <td className="px-3 py-2 text-foreground group-hover:underline">
+                  {repoBasename(r.repoPath)}
+                </td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-foreground">
+                  {formatPercent(r.share)}
+                </td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
+                  {formatInt(r.ai)}
+                </td>
+                <td className="px-3 py-2 text-right font-mono tabular-nums text-muted-foreground">
+                  {formatInt(r.commits)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function repoBasename(p: string): string {
+  const parts = p.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] ?? p;
+}
+
+// ============ 本地未提交快照卡 ============
+
+/**
+ * 「本地未提交」独立卡(群贤决策:不折进时间窗口指标,单独呈现)。
+ * 跨选中仓聚合 `git ai status`(当前工作树未提交改动),与"已提交·本窗口"主指标物理分开。
+ * 点某仓 chip → 进该仓的「工作树未提交」视图。失败仓显式列出、绝不当 0 并入。
+ */
+function WorkingUncommittedCard({
+  payload,
+  onDrill,
+}: {
+  payload: AggregateWorkingStatusPayload;
+  onDrill: (repoPath: string) => void;
+}) {
+  const { t } = useTranslation();
+  const total = payload.human_additions + payload.unknown_additions + payload.ai_additions;
+  const aiShare = total > 0 ? payload.ai_additions / total : null;
+  return (
+    <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <div className="flex items-baseline justify-between">
+        <h2 className="text-sm font-medium text-foreground">{t("dashboard.working.title")}</h2>
+        <span className="text-[10px] text-muted-foreground">{t("dashboard.working.hint")}</span>
+      </div>
+      <div className="rounded-xl border border-dashed border-border p-4">
+        {payload.failed_repos.length > 0 && (
+          <div className="mb-3 flex items-start gap-2 text-[11px] text-warning-foreground dark:text-warning">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+            <span>{t("dashboard.working.failedHint", { n: payload.failed_repos.length })}</span>
+          </div>
+        )}
+        {total === 0 ? (
+          <p className="text-xs text-muted-foreground">{t("dashboard.working.allClean")}</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-end gap-x-10 gap-y-3">
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {t("dashboard.working.aiShare")}
+                </div>
+                <div className="mt-1 font-mono text-3xl font-light leading-none tabular-nums text-primary">
+                  {formatPercent(aiShare)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {t("dashboard.working.aiLines")}
+                </div>
+                <div className="mt-1 font-mono text-2xl font-light leading-none tabular-nums text-foreground">
+                  {formatInt(payload.ai_additions)}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("dashboard.working.scope", { n: payload.repos_with_changes })}
+              </p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {payload.per_repo.map((r) => (
+                <button
+                  key={r.repo_path}
+                  type="button"
+                  onClick={() => onDrill(r.repo_path)}
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground"
+                >
+                  <span className="font-medium text-foreground">{repoBasename(r.repo_path)}</span>
+                  <span className="font-mono tabular-nums">AI {formatInt(r.ai_additions)}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // ============ Hero KPI ============
 
 /**
@@ -342,32 +634,21 @@ function HeroKpiRow({
   aiShareDelta,
   windowAiTotal,
   commitCount,
-  hookCoverage,
-  hookCoverageDetail,
-  hookCoverageLoading,
-  hookCoverageError,
-  onRetryHookCoverage,
-  onJumpHooks,
 }: {
   aiShare: number | null;
   aiShareDelta: number | null;
   windowAiTotal: number;
   commitCount: number;
-  hookCoverage: number | null;
-  hookCoverageDetail: string | null;
-  hookCoverageLoading: boolean;
-  hookCoverageError: string | null;
-  onRetryHookCoverage: () => void;
-  onJumpHooks: () => void;
 }) {
   const { t } = useTranslation();
+  // 跨仓聚合无单一 hook 覆盖率(各仓 git-ai 版本/配置可不同),覆盖率改在单仓下钻视图看(M4)。
   return (
-    <section className="grid grid-cols-1 gap-x-12 gap-y-8 md:grid-cols-[1.4fr_1fr_1fr]">
+    <section className="grid grid-cols-1 gap-x-12 gap-y-8 md:grid-cols-2">
       <HeroKpi
         label={t("dashboard.metricTitles.headAiRate")}
         value={formatPercent(aiShare)}
         delta={aiShareDelta}
-        deltaSuffix="vs 上一同长度窗口"
+        deltaSuffix={t("dashboard.delta.vsPrevPeriod")}
         formulaId="ai_share"
       />
       <SecondaryKpi
@@ -377,92 +658,7 @@ function HeroKpiRow({
         caption={`窗口含 ${formatInt(commitCount)} 个 commit`}
         formulaId="window_ai_total"
       />
-      <HookCoverageKpi
-        hookCoverage={hookCoverage}
-        hookCoverageDetail={hookCoverageDetail}
-        loading={hookCoverageLoading}
-        error={hookCoverageError}
-        onRetry={onRetryHookCoverage}
-        onJumpHooks={onJumpHooks}
-      />
     </section>
-  );
-}
-
-/**
- * hook 覆盖率次级 KPI —— 由独立 query 驱动,所以单独成组件处理它自己的三态:
- * - loading:数字位转圈(range 聚合慢,可达 50s+)
- * - error:显示"失败"+ 内联重试,**只**影响本卡
- * - 数据:与其它 SecondaryKpi 同款,可点跳 Hooks 页
- */
-function HookCoverageKpi({
-  hookCoverage,
-  hookCoverageDetail,
-  loading,
-  error,
-  onRetry,
-  onJumpHooks,
-}: {
-  hookCoverage: number | null;
-  hookCoverageDetail: string | null;
-  loading: boolean;
-  error: string | null;
-  onRetry: () => void;
-  onJumpHooks: () => void;
-}) {
-  const { t } = useTranslation();
-  // 数据未到位之前(loading / error)不可点跳 Hooks;有数据后整卡可点。
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-2 text-left">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {t("dashboard.metricTitles.hookCoverage")}
-          </span>
-          <FormulaPopover metricId="hook_coverage_rate" />
-        </div>
-        <div className="flex items-center gap-2 font-mono text-3xl font-light leading-none text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" />
-        </div>
-        <p className="text-xs text-muted-foreground">正在采集范围聚合指标…</p>
-      </div>
-    );
-  }
-  if (error) {
-    return (
-      <div className="flex flex-col gap-2 text-left">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {t("dashboard.metricTitles.hookCoverage")}
-          </span>
-          <FormulaPopover metricId="hook_coverage_rate" />
-        </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="font-mono text-3xl font-light leading-none tabular-nums text-muted-foreground">
-            —
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={onRetry}
-          title={error}
-          className="inline-flex items-center gap-1 self-start rounded text-xs text-amber-700 transition-colors hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-amber-300"
-        >
-          <RefreshCw className="h-3 w-3" />
-          采集失败,点此重试
-        </button>
-      </div>
-    );
-  }
-  return (
-    <SecondaryKpi
-      label={t("dashboard.metricTitles.hookCoverage")}
-      value={formatPercent(hookCoverage)}
-      caption={hookCoverageDetail ? `${hookCoverageDetail} commit 含 hook` : "—"}
-      formulaId="hook_coverage_rate"
-      onClick={onJumpHooks}
-      ariaLabel="跳到 Hooks 页"
-    />
   );
 }
 
@@ -601,7 +797,15 @@ function DeltaPill({ delta, suffix }: { delta: number | null; suffix: string }) 
  * 数值塞进 tooltip(`<RTooltip />` 自定义 formatter 完成)。
  * grid 几乎不可见,axis 弱化,主线用 currentColor(深色模式自动反相)。
  */
-function WindowAiChart({ daily }: { daily: DailyBucket[] }) {
+function WindowAiChart({
+  daily,
+  granularity,
+  onChangeGranularity,
+}: {
+  daily: DailyBucket[];
+  granularity: Granularity;
+  onChangeGranularity: (g: Granularity) => void;
+}) {
   const { t } = useTranslation();
   const data = useMemo(
     () =>
@@ -617,12 +821,20 @@ function WindowAiChart({ daily }: { daily: DailyBucket[] }) {
 
   return (
     <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-medium text-foreground">每日 AI 行数</h2>
-        <span className="text-[10px] text-muted-foreground">human / unknown 见 tooltip</span>
+      {/* 粒度切换归属于这张图:按天/周/月只改本图的 rollup,放在图标题行才说得通(从属时间轴)。 */}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-1 text-sm font-medium text-foreground">
+          {granularity === "week"
+            ? "每周 AI 行数"
+            : granularity === "month"
+              ? "每月 AI 行数"
+              : "每日 AI 行数"}
+          <FormulaPopover metricId="window_ai_total" />
+        </h2>
+        <GranularityToggle value={granularity} onChange={onChangeGranularity} />
       </div>
       {allZero ? (
-        <div className="flex h-32 items-center justify-center rounded-md border border-dashed border-border text-xs text-muted-foreground">
+        <div className="flex h-32 items-center justify-center rounded-xl border border-dashed border-border text-xs text-muted-foreground">
           {t("dashboard.chartAllZero")}
         </div>
       ) : (
@@ -637,11 +849,15 @@ function WindowAiChart({ daily }: { daily: DailyBucket[] }) {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="2 4" stroke={CHART_COLORS.grid} vertical={false} />
-              <XAxis dataKey="date" {...axisDefaultProps} />
+              <XAxis
+                dataKey="date"
+                {...axisDefaultProps}
+                tickFormatter={(v) => formatBucketLabel(String(v), granularity)}
+              />
               <YAxis {...axisDefaultProps} width={32} />
               <RTooltip
                 cursor={{ stroke: CHART_COLORS.grid, strokeWidth: 1 }}
-                content={<MinimalTooltip />}
+                content={<MinimalTooltip granularity={granularity} />}
               />
               <Area
                 type="monotone"
@@ -671,13 +887,36 @@ interface TooltipPayloadItem {
   payload: ChartDatum;
 }
 
+/** 桶键 → X 轴短标签。桶键:day/week = "YYYY-MM-DD"(week 为周一那天),month = "YYYY-MM-01"。
+ *  month 显示 "YYYY-MM";day/week 显示 "MM-DD"(配合标题"每周/每日"区分粒度)。 */
+function formatBucketLabel(date: string, g: Granularity): string {
+  return g === "month" ? date.slice(0, 7) : date.slice(5);
+}
+
+/** tooltip 顶部日期:按粒度点明"当周/当月",避免周/月桶的日期被误读成某一天。 */
+function formatBucketTooltipDate(date: string, g: Granularity): string {
+  if (g === "month") return `${date.slice(0, 7)} 当月`;
+  if (g === "week") return `${date.slice(5)} 当周(周一起)`;
+  return date;
+}
+
 /** 自定义 tooltip:三行,date 顶,3 桶下方,等宽对齐;沿用 popover 主题色。 */
-function MinimalTooltip({ active, payload }: { active?: boolean; payload?: TooltipPayloadItem[] }) {
+function MinimalTooltip({
+  active,
+  payload,
+  granularity,
+}: {
+  active?: boolean;
+  payload?: TooltipPayloadItem[];
+  granularity: Granularity;
+}) {
   if (!active || !payload || payload.length === 0) return null;
   const d = payload[0].payload;
   return (
     <div className="rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-sm">
-      <div className="font-mono text-[11px] text-muted-foreground">{d.date}</div>
+      <div className="font-mono text-[11px] text-muted-foreground">
+        {formatBucketTooltipDate(d.date, granularity)}
+      </div>
       <div className="mt-1 grid grid-cols-[auto_auto] gap-x-3 gap-y-0.5 font-mono text-[11px] tabular-nums">
         <span className="text-muted-foreground">AI</span>
         <span className="text-right">{formatInt(d.ai)}</span>
@@ -700,25 +939,32 @@ function MinimalTooltip({ active, payload }: { active?: boolean; payload?: Toolt
  */
 function RecentCommitsTable({
   commits,
-  onPickSha,
+  onPick,
 }: {
-  commits: PerCommitStat[];
-  onPickSha: (sha: string) => void;
+  commits: AggregatePerCommit[];
+  onPick: (sha: string, repoPath: string) => void;
 }) {
+  const { t } = useTranslation();
   // 后端 per_commit 已按 authored_at 倒序;这里只取头 RECENT_LIMIT 条
   const visible = commits.slice(0, RECENT_LIMIT);
   const more = Math.max(0, commits.length - visible.length);
   return (
     <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-medium text-foreground">最近 commit</h2>
+        <h2 className="flex items-center gap-1 text-sm font-medium text-foreground">
+          最近 commit
+          <FormulaPopover metricId="ai_share" />
+        </h2>
         <span className="text-[10px] text-muted-foreground">点击进入 commit 详情</span>
       </div>
-      <div className="overflow-hidden rounded-md border border-border">
+      <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border bg-muted/30 text-[10px] uppercase tracking-wider text-muted-foreground">
               <th className="w-[88px] px-3 py-2 text-left font-medium">SHA</th>
+              <th className="px-3 py-2 text-left font-medium">
+                {t("dashboard.recentCommits.repo")}
+              </th>
               <th className="px-3 py-2 text-left font-medium">时间</th>
               <th className="w-[80px] px-3 py-2 text-right font-medium">AI 占比</th>
               <th className="w-[80px] px-3 py-2 text-right font-medium">AI 行</th>
@@ -731,12 +977,15 @@ function RecentCommitsTable({
               const share = total > 0 ? c.stats.ai_additions / total : null;
               return (
                 <tr
-                  key={c.sha}
-                  onClick={() => onPickSha(c.sha)}
+                  key={`${c.repo_path}:${c.sha}`}
+                  onClick={() => onPick(c.sha, c.repo_path)}
                   className="group cursor-pointer border-t border-border/60 transition-colors duration-150 hover:bg-primary/5 first:border-t-0"
                 >
                   <td className="px-3 py-2 font-mono text-[11px] tabular-nums text-primary group-hover:underline">
                     {c.short}
+                  </td>
+                  <td className="truncate px-3 py-2 text-muted-foreground">
+                    {repoBasename(c.repo_path)}
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {formatAuthoredAt(c.authored_at)}
@@ -771,7 +1020,7 @@ function RecentCommitsTable({
   );
 }
 
-function totalAdditions(c: PerCommitStat): number {
+function totalAdditions(c: AggregatePerCommit): number {
   return c.stats.human_additions + c.stats.unknown_additions + c.stats.ai_additions;
 }
 
@@ -791,76 +1040,49 @@ function formatAuthoredAt(iso: string): string {
 
 /**
  * 单行警示横条 — 取代旧的 Card 包裹的 banner。
- * 颜色仍走 amber(警示语义),但去掉背景大色块、改为 border-l 强调条。
+ * 警示语义由琥珀左强调条(border-l-warning)+ AlertTriangle 图标承载,正文用可读的
+ * foreground —— 琥珀做正文在亮色页背景上偏淡不可读(该色系固有约束),故文字走中性高对比色。
  */
 function InlineBanner({ kind, text }: { kind: "warn"; text: string }) {
   const tone =
-    kind === "warn"
-      ? "border-l-amber-500 text-amber-700 dark:text-amber-300"
-      : "border-l-border text-foreground";
+    kind === "warn" ? "border-l-warning text-foreground" : "border-l-border text-foreground";
   return (
     <div
       className={`flex items-start gap-2 border-l-2 ${tone} pl-3 text-xs animate-in fade-in duration-200`}
     >
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
       <span>{text}</span>
     </div>
   );
 }
 
-// ============ 缺 hook 的 commit 列表 ============
-
-function MissingHookList({ payload }: { payload: RangeAuthorshipStatsData }) {
-  const router = useRouter();
-  const missing = payload.commits_without_authorship_with_authors;
-  if (missing.length === 0) return null;
-  const PREVIEW = 8;
+/** 搭桥条:当前下钻仓不在聚合集时,说明"Dashboard 看的是聚合集"并给一键加入。 */
+function CurrentRepoNotInAggregateBanner({
+  repoName,
+  onAdd,
+}: {
+  repoName: string;
+  onAdd: () => void;
+}) {
+  const { t } = useTranslation();
   return (
-    <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-sm font-medium text-foreground">缺 hook 的 commit</h2>
-        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
-          {missing.length} / {payload.total_commits}
-        </span>
-      </div>
-      <ul className="divide-y divide-border/60 overflow-hidden rounded-md border border-border">
-        {missing.slice(0, PREVIEW).map(([sha, author]) => (
-          <li
-            key={sha}
-            className="flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors duration-150 hover:bg-muted/40"
-          >
-            <button
-              type="button"
-              onClick={() => router.navigate("stats", sha)}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              title={`查看 ${sha.slice(0, 7)} 的 stats`}
-            >
-              <code className="font-mono text-[11px] tabular-nums text-foreground">
-                {sha.slice(0, 7)}
-              </code>
-              <span className="truncate text-muted-foreground">{author}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => router.navigate("blame", undefined, { sha })}
-              title={`在 Blame 中查看 ${sha.slice(0, 7)} 的代码`}
-              aria-label="在 Blame 中查看代码"
-              className="shrink-0 rounded p-1 text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </button>
-          </li>
-        ))}
-      </ul>
-      {missing.length > PREVIEW && (
-        <p className="text-[11px] text-muted-foreground">
-          …还有 <span className="font-mono tabular-nums">{missing.length - PREVIEW}</span> 个 — 去
-          People 页按作者聚合查看。
-        </p>
-      )}
-    </section>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-dashed border-border bg-muted/30 px-3 py-2 text-xs animate-in fade-in duration-200">
+      <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <span className="text-muted-foreground">
+        {t("dashboard.currentNotIncluded", { repo: repoName })}
+      </span>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="ml-auto inline-flex h-7 items-center gap-1 rounded-md bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+      >
+        <Plus className="h-3 w-3" /> {t("dashboard.addCurrentToAggregate")}
+      </button>
+    </div>
   );
 }
+
+// ============ 缺 hook 的 commit 列表 ============
 
 // ============ 空窗口 ============
 
@@ -869,7 +1091,7 @@ function EmptyWindowCard({ range, onWiden }: { range: TimeRange; onWiden: () => 
   const label = describeRange(range);
   const alreadyWidest = range.kind === "last_n_days" && range.days >= 90;
   return (
-    <div className="rounded-md border border-dashed border-border px-8 py-10 text-center animate-in fade-in duration-200">
+    <div className="rounded-xl border border-dashed border-border px-8 py-10 text-center animate-in fade-in duration-200">
       <div className="text-sm font-medium text-foreground">{t("dashboard.emptyWindow.title")}</div>
       <p className="mt-1.5 text-xs text-muted-foreground">
         {t("dashboard.emptyWindow.descriptionTemplate", { rangeLabel: label })}
@@ -919,13 +1141,11 @@ function Footnote({
   now,
   cacheHits,
   totalInWindow,
-  cachedRepoTotal,
 }: {
   fetchedAt: number;
   now: number;
   cacheHits: number;
   totalInWindow: number;
-  cachedRepoTotal: number;
 }) {
   const { t } = useTranslation();
   const rel = fetchedAt ? formatRelativeFromNow(fetchedAt, now) : "—";
@@ -937,8 +1157,6 @@ function Footnote({
       </div>
       <div className="font-mono tabular-nums">
         {t("dashboard.cacheHint.cachedTemplate", { hits: cacheHits, total: totalInWindow })}
-        <span className="mx-1.5 opacity-60">·</span>
-        本仓库累计 {cachedRepoTotal}
       </div>
     </div>
   );
@@ -946,8 +1164,30 @@ function Footnote({
 
 // ============ 派生 helpers ============
 
+/**
+ * 窗口是否"含现在"——决定是否显示「本地未提交」卡。
+ * today / this_week / this_month / last_n_days 的 end 都是当前时刻 → 含现在;
+ * yesterday / last_week / last_month 是已结束区间 → 不含;custom 看 end 是否 ≥ 现在(留 1min 容差)。
+ * 给"上周"配一张"当前未提交"卡没有意义,故已结束区间不显示。
+ */
+function rangeIncludesNow(range: TimeRange): boolean {
+  switch (range.kind) {
+    case "today":
+    case "this_week":
+    case "this_month":
+    case "last_n_days":
+      return true;
+    case "yesterday":
+    case "last_week":
+    case "last_month":
+      return false;
+    case "custom":
+      return range.end_unix_ms >= Date.now() - 60_000;
+  }
+}
+
 /** 窗口内 AI 占比 = Σ ai_additions / Σ (human + unknown + ai)。total=0 → null。 */
-function computeWindowAiShare(per: PerCommitStat[]): number | null {
+function computeWindowAiShare(per: AggregatePerCommit[]): number | null {
   let ai = 0;
   let total = 0;
   for (const c of per) {
@@ -988,13 +1228,15 @@ function derivePrevRange(r: TimeRange): TimeRange {
       return { kind: "custom", start_unix_ms: start, end_unix_ms: end };
     }
     case "last_month": {
+      // cur = 上一整月(本月若 5 月 → cur=4 月)。prev 取**再上一整月**(3 月)完整日历月,
+      // 与 cur 不重叠、不跨错月,对齐后端 last_month 的 start_of_month 语义(history.rs)。
       const now = new Date();
-      const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-      const startOfLastLastMonth = new Date(now.getFullYear(), now.getMonth() - 2, 1).getTime();
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime(); // cur 起点(4 月 1 日 00:00)
+      const startOfLastLastMonth = new Date(now.getFullYear(), now.getMonth() - 2, 1).getTime(); // prev 起点(3 月 1 日 00:00)
       return {
         kind: "custom",
-        start_unix_ms: startOfLastLastMonth,
-        end_unix_ms: startOfThisMonth - 24 * 60 * 60 * 1000, // 上上月最后一天 00:00
+        start_unix_ms: startOfLastLastMonth, // 上上月 1 日 00:00
+        end_unix_ms: startOfLastMonth - 1, // 上月 1 日 00:00 前 1ms = 上上月最后一天 23:59:59.999
       };
     }
     case "last_n_days": {

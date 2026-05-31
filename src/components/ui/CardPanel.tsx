@@ -29,6 +29,17 @@ const PADDING_CLASS: Record<CardPadding, string> = {
   lg: "p-6",
 };
 
+/** 语义左色条:AI 相关卡走 "ai"(蓝)、人工相关卡走 "human"(绿),给同类卡一道色边以告别
+ *  "全是一种灰扁平"。neutral(默认)无色条 —— **绝不**用 border-l-transparent 占位,否则现有
+ *  所有卡片会凭空左移 2px。色值走 T1 的 --ai/--human token。 */
+type CardTone = "ai" | "human" | "neutral";
+
+const TONE_CLASS: Record<CardTone, string> = {
+  ai: "border-l-2 border-l-ai",
+  human: "border-l-2 border-l-human",
+  neutral: "",
+};
+
 // Omit 原生 HTMLDivElement.title:那个属性签名是 string(浏览器 tooltip),
 // 与本组件 ReactNode 标题语义冲突 —— 我们让 `title` 接管这个名字
 export interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "title"> {
@@ -42,6 +53,10 @@ export interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "t
   padding?: CardPadding;
   /** 鼠标悬浮时高亮 border(用于可点卡或希望强调互动的卡)。 */
   interactive?: boolean;
+  /** 背景层级:true 时用 bg-card-elevated 抬升一档(KPI 主卡 / 强调卡)。默认 false。 */
+  elevated?: boolean;
+  /** 语义左色条:AI 相关卡 "ai"、人工相关卡 "human";默认 neutral 无色条。 */
+  tone?: CardTone;
 }
 
 /**
@@ -51,16 +66,33 @@ export interface CardProps extends Omit<React.HTMLAttributes<HTMLDivElement>, "t
  * interactive=true 时 hover 边框转 `border-primary/40`(150ms transition)。
  */
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, title, icon, actions, padding = "md", interactive, children, ...rest }, ref) => {
+  (
+    {
+      className,
+      title,
+      icon,
+      actions,
+      padding = "md",
+      interactive,
+      elevated,
+      tone = "neutral",
+      children,
+      ...rest
+    },
+    ref,
+  ) => {
     const hasHeader = title !== undefined || icon !== undefined || actions !== undefined;
     return (
       <div
         ref={ref}
         className={cn(
-          "rounded-xl border border-border bg-card text-card-foreground",
+          "rounded-xl border border-border text-card-foreground",
+          elevated ? "bg-card-elevated" : "bg-card",
+          TONE_CLASS[tone],
           // 细 ring 替代 shadow-sm:深色面上不会留灰边
           "ring-1 ring-border/40",
-          interactive && "transition-colors duration-150 hover:border-primary/40",
+          interactive &&
+            "transition-colors duration-150 hover:border-primary/40 hover:bg-card-elevated",
           className,
         )}
         {...rest}

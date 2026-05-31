@@ -59,6 +59,7 @@
     }
   },
   "stats": {
+    "workingScopeHint": "注:这是「当前仓库」的未提交改动;Dashboard 的「本地未提交」卡统计的是你勾选的聚合集(可能不含本仓)。",
     "degraded": {
       "repoMissing": {
         "title": "请先选择一个仓库",
@@ -124,7 +125,40 @@
         "title": "未检测到 git-ai",
         "description": "Dashboard 历史聚合依赖 git-ai stats。安装后回到本页即可。",
         "cta": "前往安装"
+      },
+      "noReposSelected": {
+        "title": "未勾选任何仓库",
+        "description": "Dashboard 看的是你勾选的「聚合集」(跨仓总览);提交归因 / 作者归因 / Blame 看的是你「当前下钻」的单个仓。先去「仓库」页加入至少一个仓,再回来看跨仓趋势。",
+        "cta": "前往仓库"
       }
+    },
+    "aggregateScope": "聚合 {{n}} 个仓库",
+    "dataHint": "数据来自本机 git-ai 解析:窗口 AI 占比 = Σ AI 行 / Σ(人 + 未归因 + AI)行;各指标 / 报表标题旁点 ⓘ 看完整公式与口径。",
+    "currentNotIncluded": "当前下钻仓库「{{repo}}」不在 Dashboard 聚合集里 —— 上面的数字来自你勾选的其它仓,不含它。",
+    "addCurrentToAggregate": "加入聚合",
+    "aggregating": "正在聚合 {{n}} 个仓库的统计…",
+    "aggregateFailed": "跨仓聚合失败:{{msg}}",
+    "failedReposHint": "{{n}} 个仓库采集失败,未纳入聚合统计(绝不当 0 并入)。",
+    "truncatedReposHint": "{{n}} 个仓库 commit 数达上限(500),更老 commit 未计入本窗口。",
+    "granularity": { "day": "按天", "week": "按周", "month": "按月" },
+    "scope": { "onlyMine": "只看我", "everyone": "全部作者" },
+    "delta": { "vsPrevPeriod": "vs 上一周期" },
+    "working": {
+      "title": "本地未提交",
+      "hint": "你当前的未提交改动 · 实时",
+      "aiShare": "AI 占比",
+      "aiLines": "AI 行",
+      "scope": "{{n}} 个仓有未提交",
+      "allClean": "无未提交改动",
+      "failedHint": "{{n}} 个仓读取未提交状态失败,未计入"
+    },
+    "recentCommits": { "repo": "仓库" },
+    "repoBreakdown": {
+      "title": "按仓库分解",
+      "repo": "仓库",
+      "aiShare": "AI 占比",
+      "aiLines": "AI 行",
+      "commits": "Commit"
     },
     "emptyWindow": {
       "title": "所选区间无 commit",
@@ -182,7 +216,7 @@
       "agentLabel": "Agent",
       "humanLabel": "人类作者",
       "loginRequired": "未登录 git-ai,无法关联人类作者",
-      "scopeWarningRepoWide": "(整个仓库累计,非本文件局部统计)",
+      "scopeWarningRepoWide": "(该 prompt 在此 note 的统计,非本文件局部;merge/squash 时为被折叠提交的合计)",
       "acceptedTemplate": "采纳 {{n}} 行",
       "overridenTemplate": "被人工覆盖 {{n}} 行",
       "totalAdditionsTemplate": "生产 {{n}} 行",
@@ -197,32 +231,35 @@
       "ai": "AI 归属行",
       "nonAi": "非 AI 行(可能人类编辑、hook 未捕获或 notes 丢失)"
     },
+    "title": "Blame 行级",
+    "loading": "加载中…",
+    "errorPrefix": "Blame 失败",
+    "fileDegradedFallbackTitle": "无法显示文件",
+    "lineDetail": {
+      "close": "关闭归属面板"
+    },
     "lrange": {
       "label": "范围(-L)",
       "placeholder": "如 15,25",
+      "apply": "应用",
       "invalid": "格式无效。需 'start,end',start ≤ end,均 > 0。"
     },
-    "fileSearchPlaceholder": "搜索文件…",
-    "fileListEmpty": "未匹配任何文件",
-    "fileListHintTemplate": "共 {{n}} 个文件;输入关键字过滤(按目录前缀模糊匹配)。",
+    "commitNav": {
+      "subtitle": "选一个 commit,看它改了哪些文件 → 点文件看整文件逐行 AI 归因",
+      "searchPlaceholder": "搜索 message / sha…",
+      "heading": "提交历史",
+      "loading": "正在解析 git-ai stats…",
+      "truncated": "达上限 {{n}}",
+      "truncatedTitle": "已加载最近 {{n}} 个 commit,可能有更老的未纳入"
+    },
+    "instructions": {
+      "pickCommit": "从左侧选择一个 commit",
+      "pickFile": "选择左下方该 commit 的一个改动文件",
+      "body": "AI 写的行整行淡蓝高亮、行号染蓝;人写行无色块。点击任意 AI 行,右侧展开它的 prompt 摘要(哪个 agent / 模型、采纳 / 被改)。"
+    },
     "refPicker": {
-      "label": "Ref:",
-      "currentHead": "HEAD",
-      "triggerTitle": "按分支 / commit sha 过滤 blame 视图",
-      "popoverTitle": "选择 ref",
-      "resetToHead": "回到 HEAD",
-      "branchesHeading": "本地分支",
-      "noBranches": "无本地分支",
-      "branchesLoading": "读取分支中…",
-      "branchesFailed": "分支列表读取失败",
-      "shaInputHeading": "或粘贴 commit sha / tag",
-      "shaInputPlaceholder": "如 abc1234 或 v1.2.0",
-      "shaApply": "应用",
-      "shaEmpty": "请输入 sha 或 tag",
       "refNotFoundTitle": "Ref 未找到",
-      "refNotFoundTemplate": "git 找不到 {{r}}(或不是 commit 对象)。检查拼写,或从下拉里选一个分支。",
-      "activeChipTemplate": "当前:{{r}}",
-      "searchBranchesPlaceholder": "搜索分支名…"
+      "refNotFoundTemplate": "git 找不到 {{r}}(或不是 commit 对象)。检查拼写,或重新选一个 commit。"
     }
   },
   "timeRange": {
@@ -327,13 +364,6 @@
       "promptLabel": "AI",
       "humanLabel": "人类",
       "sessionLabel": "Session"
-    },
-    "messages": {
-      "collapsedHint": "对话内容仅本机渲染,不会被上传",
-      "typeUser": "用户",
-      "typeAssistant": "助手",
-      "typeToolUse": "工具调用",
-      "noMessages": "本 prompt 无 messages 记录"
     },
     "actions": {
       "copyHash": "复制 hash",
@@ -494,10 +524,8 @@
   },
   "people": {
     "page": {
-      "title": "按人统计",
+      "title": "作者归因",
       "subtitle": "把当前仓库窗口内的 AI 归因按 author_email 聚合;数字本地解析,不上传。",
-      "searchPlaceholder": "搜索姓名 / 邮箱…",
-      "exportCsv": "导出 CSV",
       "refresh": "立即刷新",
       "refreshing": "刷新中…",
       "identityHint": "身份键 = author_email 的小写形式;同邮箱大小写差异自动归为同一行。不引 git mailmap。",
@@ -506,12 +534,12 @@
     "degraded": {
       "repoMissing": {
         "title": "请先选择一个仓库",
-        "description": "按人统计需要一个 git 仓库才能按 author 聚合 commit。前往「仓库」页选择。",
+        "description": "作者归因需要一个 git 仓库才能按 author 聚合 commit。前往「仓库」页选择。",
         "cta": "前往仓库"
       },
       "gitAiMissing": {
         "title": "未检测到 git-ai",
-        "description": "按人统计依赖 git-ai stats。安装后回到本页即可。",
+        "description": "作者归因依赖 git-ai stats。安装后回到本页即可。",
         "cta": "前往安装"
       }
     },
@@ -519,9 +547,15 @@
       "title": "所选区间无 commit",
       "description": "当前窗口内没有任何 commit,无法按人聚合。"
     },
-    "emptySearch": {
-      "title": "未匹配任何作者",
-      "description": "试着清空搜索框,或换关键字。"
+    "emptyMine": {
+      "title": "你在本窗口没有 commit",
+      "description": "「只看我」口径下,当前 git 用户在所选时间范围内没有提交。",
+      "cta": "查看全部作者"
+    },
+    "cannotIdentifyMe": {
+      "title": "无法确定当前 git 用户",
+      "description": "该仓库未配置 user.email,无法按「只看我」过滤。请配置后重试,或先查看全部作者。",
+      "cta": "查看全部作者"
     },
     "failedHintTemplate": "本次有 {{n}} 个 commit 的 stats 采集失败,这些 commit 计入「commits 数」但不参与 AI/人工/未归因累加,数字不被 0 桶兜底污染。",
     "truncatedHintTemplate": "仓库 commit 数已超过 {{cap}} 条上限,本窗口可能漏算更老 commit。改用更短时间窗后再聚合。",
@@ -550,6 +584,12 @@
       "humanTemplate": "人工 +{{n}}"
     }
   },
+  "commitList": {
+    "empty": "没有匹配的 commit",
+    "failed": "失败",
+    "failedTitle": "采集失败",
+    "countTemplate": "{{n}} 个 commit"
+  },
   "changedFiles": {
     "title": "本 commit 改动文件",
     "empty": "本 commit 无改动文件(可能是空提交)。",
@@ -568,13 +608,47 @@
       "B": "拆分"
     },
     "aiLineChipTemplate": "{{n}} 行 AI",
-    "jumpBlameTitle": "在 Blame 中查看(锁定到该 commit)"
+    "jumpBlameTitle": "在 Blame 中查看(锁定到该 commit)",
+    "deletedFileTitle": "已删除文件,无法查看逐行归因",
+    "viewBlameTitle": "查看该文件逐行归因"
   },
   "authorsJumpBlame": {
     "noAiLinesDisabled": "该作者在本窗口内的 commit 都没有 AI 归因行,无法跳转",
     "jumpTitle": "在 Blame 中查看该作者最新 commit 的 AI 行"
   },
   "diagnostic": {
+    "agentHooks": {
+      "title": "AI Agent Hooks",
+      "configuredCountTemplate": "已配 {{configured}}/{{total}}",
+      "fixMissingTemplate": "修复缺失({{n}})",
+      "fixMissingDisabledTitle": "当前没有需要修复的 agent",
+      "fixMissingTitleTemplate": "将为 {{n}} 个 agent 写入官方 hooks",
+      "statusConfigured": "已配置",
+      "statusMissing": "缺失",
+      "statusNotInstalled": "未安装",
+      "fixThis": "修复此项",
+      "fixThisTitleTemplate": "仅为 {{agent}} 触发 hook 修复",
+      "unknownPath": "(未知路径)"
+    },
+    "checklist": {
+      "title": "自动检查清单",
+      "allPassTemplate": "全部通过 {{pass}}/{{total}}",
+      "needAttentionTemplate": "{{n}} 项需处理",
+      "expand": "展开明细",
+      "collapse": "收起",
+      "statusPass": "通过",
+      "statusWarn": "警告",
+      "statusFail": "失败",
+      "statusNa": "不适用"
+    },
+    "hero": {
+      "allGood": "一切就绪",
+      "needAttentionTemplate": "{{n}} 项待处理"
+    },
+    "report": {
+      "title": "详细报告",
+      "summaryTemplate": "{{n}} 段"
+    },
     "check": {
       "gitAiBinaryLabel": "git-ai 二进制存在",
       "gitAiBinaryImpact": "所有 AI 归因指标都无法生成(没有打标工具就没有 stats / blame / notes)",
@@ -582,14 +656,6 @@
       "gitAiVersionLabel": "git-ai 版本",
       "gitAiVersionImpactWarn": "该版本已被标记为有已知问题。本地 stats 不受影响,但远端聚合(部门看板)的统计数据可能失真。",
       "gitAiVersionFix": "更换版本",
-      "gitShimLabel": "git 代理 shim 已生效",
-      "gitShimErrDetail": "where/which 都没找到 git 二进制",
-      "gitShimErrImpact": "git 命令本身缺失,git-ai 的代理拦截链路无从启动",
-      "gitShimGoInstall": "前往安装",
-      "gitShimFirstIsShimTemplate": "第一行 = {{expected}}",
-      "gitShimMismatchTemplate": "首个候选 {{actual}} ≠ {{expected}}",
-      "gitShimMismatchImpact": "PATH 顺序错误时 git 命令会走系统原生而非 git-ai 代理,commit 不会触发归因,stats 全为 0",
-      "gitShimReinstall": "重新安装",
       "loginLabel": "git-ai 登录态",
       "loginImpactNotLoggedIn": "本地归因仍可工作,但远端聚合(部门看板)的推送可能失败",
       "loginFix": "查看登录指引",
@@ -620,7 +686,6 @@
     },
     "overviewChips": {
       "gitAi": "git-ai",
-      "gitShim": "Git Shim",
       "login": "Login",
       "hooks": "Hooks",
       "repo": "Repo"
@@ -716,7 +781,7 @@
       ]
     },
     "metrics": {
-      "hint": "指标定义与本工具 Stats / 按人统计 页完全同源(formulas.ts)。total = 人工 + 未归因 + AI 三桶并列。",
+      "hint": "指标定义与本工具 提交归因 / 作者归因 页完全同源(formulas.ts)。total = 人工 + 未归因 + AI 三桶并列。",
       "kindRaw": "原始",
       "kindDerived": "派生",
       "examplePrefix": "例:"
@@ -780,9 +845,10 @@
   "nav": {
     "appName": "Git AI Studio",
     "appTagline": "本地 AI 代码归因",
+    "repo": "仓库",
     "dashboard": "Dashboard",
-    "commits": "提交详情",
-    "people": "按人统计",
+    "commits": "提交归因",
+    "people": "作者归因",
     "blame": "Blame 行级",
     "notes": "git notes",
     "checkpoints": "Checkpoints",
@@ -831,10 +897,10 @@
   },
   "onboarding": {
     "title": "三步完成设置,开始看 AI 写了哪些行",
-    "description": "Git AI Studio 依赖外部 git-ai CLI:装好 git-ai、选一个本地仓库、给 AI agent 配好 hook,Dashboard 才有数据。",
+    "description": "Git AI Studio 依赖外部 git-ai CLI:装好 git-ai、把仓库加入 Dashboard 聚合集、给 AI agent 配好 hook,Dashboard 才有数据。",
     "checklist": {
       "gitAi": "安装 git-ai CLI",
-      "repo": "选择本地仓库",
+      "repo": "把仓库加入 Dashboard 聚合",
       "hook": "为 AI agent 配置 hook"
     },
     "cta": "完成设置",
@@ -854,11 +920,33 @@
   },
   "repo": {
     "title": "仓库管理",
-    "subtitle": "配置扫描根目录,然后选一个仓库作为后续诊断与统计的对象。",
+    "subtitle": "加入想纳入 Dashboard 跨仓聚合的仓库,或点「查看」深入某个仓的 Stats / People / Blame。",
     "current": "当前",
+    "summary": {
+      "aggregateTitle": "聚合分析(Dashboard 跨仓)",
+      "aggregateCount": "{{n}} 个仓库",
+      "aggregateHint": "加入的仓库会汇总进 Dashboard 的跨仓视图。",
+      "currentTitle": "当前仓库",
+      "currentNone": "未选择",
+      "currentHint": "Stats / People / Blame / 桌面宠物 显示的就是这个仓库。"
+    },
+    "manage": {
+      "title": "扫描目录与最近打开",
+      "rootCount": "{{n}} 个扫描根"
+    },
+    "aggregate": {
+      "includeLabel": "纳入跨仓聚合",
+      "add": "加入",
+      "added": "已加入",
+      "addTooltip": "加入 Dashboard 跨仓聚合",
+      "removeTooltip": "点击移出聚合",
+      "selectedCount": "已纳入聚合 {{n}} 仓",
+      "selectAll": "全选可见",
+      "clear": "清空",
+      "saveFailed": "保存聚合仓库失败"
+    },
     "toast": {
       "saveRootsFailed": "保存扫描根目录失败",
-      "switched": "已切换仓库",
       "switchFailed": "切换仓库失败",
       "openFolderFailed": "打开文件夹失败",
       "openPickerFailed": "打开目录选择器失败"
@@ -882,21 +970,23 @@
     "all": {
       "title": "全部仓库",
       "filterPlaceholder": "按名称或路径过滤",
-      "empty": "没有匹配的仓库。请检查扫描根目录或过滤词。"
+      "empty": "没有匹配的仓库。请检查扫描根目录或过滤词。",
+      "emptyNoRoots": "还没扫描到仓库。展开下方「扫描目录与最近打开」添加你存放代码的总目录。"
     },
     "row": {
       "dirty": "未提交",
       "checkpointCount": "{{n}} 个 checkpoint",
       "gitAiEmpty": ".git/ai 空",
       "openInExplorer": "在文件管理器打开",
-      "selected": "已选中",
-      "switching": "切换中",
-      "select": "选中"
+      "view": "查看",
+      "viewTooltip": "进入该仓的单仓视图(Stats / People / Blame)"
     }
   },
   "update": {
     "available": "发现新版本 v{{version}},点击查看并安装",
     "checkForUpdates": "检查更新",
+    "checking": "检查中…",
+    "checkingInProgress": "正在检查更新,请稍候",
     "downloadAndInstall": "下载并安装 v{{version}}",
     "downloading": "下载中…",
     "downloadingPercent": "下载中… {{percent}}%",

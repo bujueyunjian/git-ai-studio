@@ -1,11 +1,13 @@
-// 主侧栏(IA · 3 分组带标题)。
+// 主侧栏(IA · 顶部「仓库」+ 3 分组带标题)。
 //
 // # IA
-// 所有功能项分三组显式呈现,不折叠、不藏:
-// - 「分析」:Dashboard / 提交详情 / 按人统计 / Blame 行级 / git notes / Checkpoints
+// 顶部独立一个「仓库」入口(管理扫描根 / 多选聚合集 / 设当前下钻仓),它是所有分析的前置;
+// 其余功能项分三组显式呈现,不折叠、不藏:
+// - 「分析」:Dashboard / 提交归因 / 作者归因 / Blame 行级 / git notes / Checkpoints
 // - 「配置」:环境诊断 / 安装升级 / Hooks 配置 / 日志
 // - 「帮助」:用户手册(纯文档,单列一组与功能页区隔)
-// repo 切换器与设置齿轮留在顶部 TopBar,不进侧栏菜单。
+// TopBar 仍保留**当前下钻仓库**的快速切换器(与左侧「仓库」管理页职责分明):TopBar 是快速切焦点,
+// 左侧「仓库」是完整管理。设置齿轮留在 TopBar。
 //
 // # 视觉
 // logo 用蓝色 Activity 标记;active 项 `bg-blue-50 text-blue-700`(深色 blue-950/blue-300)+ 蓝图标,
@@ -19,6 +21,7 @@ import {
   Users,
   GitBranch,
   FileJson,
+  FolderGit2,
   ListTodo,
   Package,
   Plug,
@@ -44,7 +47,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-// 两组导航:label 中英规范 —— 能中文的中文(提交详情 / 按人统计 / Blame 行级 / 环境诊断 /
+// 两组导航:label 中英规范 —— 能中文的中文(提交归因 / 作者归因 / Blame 行级 / 环境诊断 /
 // 安装升级 / Hooks 配置),专有名词保留英文(Dashboard / git notes / Checkpoints)。
 const GROUPS: NavGroup[] = [
   {
@@ -93,6 +96,15 @@ export function Rail({
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-2">
+        {/* 「仓库」置顶独立项:分析的前置(选仓 / 多选聚合 / 设下钻焦点),不归入任何分组。 */}
+        <div>
+          <RailButton
+            icon={FolderGit2}
+            label={t("nav.repo")}
+            active={current === "repo"}
+            onClick={() => onNavigate("repo")}
+          />
+        </div>
         {GROUPS.map((group) => (
           <div key={group.titleKey}>
             <div className="px-2 pb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">

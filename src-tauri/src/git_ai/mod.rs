@@ -6,7 +6,6 @@ pub mod debug;
 pub mod ignore;
 pub mod notes;
 pub mod notes_ai;
-pub mod shim;
 pub mod show;
 pub mod stats;
 

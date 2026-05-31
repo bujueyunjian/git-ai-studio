@@ -91,6 +91,29 @@ pub async fn current_repo(state: State<'_, AppState>) -> Result<Option<RepoEntry
     Ok(state.current_repo.read().ok().and_then(|g| g.clone()))
 }
 
+/// 读取指定仓库**生效的** git 用户邮箱(`git config --get user.email`,在仓库目录内执行,
+/// 故 local 缺失时自动继承 global),trim + 小写归一。
+///
+/// 失败 / 未配置 → `None`:调用方据此降级(单仓直接当无身份;聚合的「只看我」口径把这类仓
+/// 显式排除为 failed_repo,绝不静默当全作者并入)。供 `current_git_user_email` 与跨仓
+/// 「只看我」过滤(`history.rs`)共用,避免两处各写一份 git config 读取。
+pub(crate) async fn read_git_user_email(repo: &std::path::Path) -> Option<String> {
+    let git_exe = which::which("git").ok()?;
+    let out = crate::proc::run_capture_with_timeout(
+        &git_exe,
+        &["config", "--get", "user.email"],
+        Some(repo),
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    .ok()?;
+    if out.status != 0 {
+        return None;
+    }
+    let email = out.stdout.trim().to_lowercase();
+    (!email.is_empty()).then_some(email)
+}
+
 #[tauri::command]
 pub async fn current_git_user_email(state: State<'_, AppState>) -> Result<Option<String>, String> {
     let repo_path: String = {
@@ -103,27 +126,7 @@ pub async fn current_git_user_email(state: State<'_, AppState>) -> Result<Option
             None => return Ok(None),
         }
     };
-    let git_exe = match which::which("git") {
-        Ok(p) => p,
-        Err(_) => return Ok(None),
-    };
-    let repo = std::path::PathBuf::from(repo_path);
-    let out = match crate::proc::run_capture_with_timeout(
-        &git_exe,
-        &["config", "--get", "user.email"],
-        Some(&repo),
-        std::time::Duration::from_secs(5),
-    )
-    .await
-    {
-        Ok(out) => out,
-        Err(_) => return Ok(None),
-    };
-    if out.status != 0 {
-        return Ok(None);
-    }
-    let email = out.stdout.trim().to_lowercase();
-    Ok((!email.is_empty()).then_some(email))
+    Ok(read_git_user_email(&std::path::PathBuf::from(repo_path)).await)
 }
 
 #[tauri::command]
@@ -148,6 +151,80 @@ pub async fn list_scan_roots() -> Result<Vec<String>, String> {
 pub async fn set_scan_roots(roots: Vec<String>) -> Result<(), String> {
     let mut settings = AppSettings::load();
     settings.scan_roots = roots;
+    settings.save().map_err(|e| format!("写配置失败: {e}"))
+}
+
+/// `get_aggregate_repos` 的返回项:聚合集合里的一个仓库 + 其当前有效性。
+/// 失效(路径已删 / 不再是 git 仓)时 `valid=false`、`entry=None` —— **不静默丢弃**,
+/// 让前端能渲染"失效仓"并提供移除入口(M1)。
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AggregateRepoEntry {
+    /// 持久化在 config 里的原始(已规整)路径。
+    pub path: String,
+    /// 该路径当前是否仍是合法 git 仓库。
+    pub valid: bool,
+    /// 有效时填充完整 RepoEntry;失效为 None。
+    pub entry: Option<RepoEntry>,
+}
+
+/// 按**精确规整路径**去重,保留首次出现顺序。入参应已 normalize()(canonicalize)。
+///
+/// 不做 lowercase:大小写折叠交给 `canonicalize` 按平台处理 —— macOS/Windows 文件系统大小写
+/// 不敏感,canonicalize 会把同一目录的不同大小写写法解析成同一真实路径;Linux 大小写敏感,
+/// `/data/Repo` 与 `/data/repo` 是**两个不同仓库**,绝不能被 lowercase 误并。纯函数,便于单测。
+fn dedup_aggregate_paths(normalized: Vec<String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = Vec::new();
+    for p in normalized {
+        if seen.insert(p.clone()) {
+            out.push(p);
+        }
+    }
+    out
+}
+
+/// 读聚合仓库集合,逐个校验是否仍为合法 git 仓(失效项标注返回,不丢弃)。
+#[tauri::command]
+pub async fn get_aggregate_repos() -> Result<Vec<AggregateRepoEntry>, String> {
+    let paths = AppSettings::load().aggregate_repos;
+    tokio::task::spawn_blocking(move || {
+        paths
+            .into_iter()
+            .map(|path| {
+                let normalized = normalize(&path);
+                let entry = if normalized.is_dir() {
+                    let ns = normalized.display().to_string();
+                    repo::discover::scan_roots(std::slice::from_ref(&ns), Some(1))
+                        .into_iter()
+                        .find(|e| {
+                            e.path.eq_ignore_ascii_case(&ns)
+                                || normalize(&e.path).display().to_string() == ns
+                        })
+                } else {
+                    None
+                };
+                AggregateRepoEntry {
+                    path,
+                    valid: entry.is_some(),
+                    entry,
+                }
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|e| format!("校验聚合仓库失败: {e}"))
+}
+
+/// 设置聚合仓库集合:每条 normalize(canonicalize)+ 大小写不敏感去重后持久化。
+/// **绝不触碰** current_repo / recent_repos(与下钻焦点正交,M1)。
+#[tauri::command]
+pub async fn set_aggregate_repos(repos: Vec<String>) -> Result<(), String> {
+    let normalized: Vec<String> = repos
+        .iter()
+        .map(|r| normalize(r).display().to_string())
+        .collect();
+    let mut settings = AppSettings::load();
+    settings.aggregate_repos = dedup_aggregate_paths(normalized);
     settings.save().map_err(|e| format!("写配置失败: {e}"))
 }
 
@@ -207,4 +284,26 @@ pub async fn open_in_explorer(path: String) -> Result<(), String> {
         cmd.spawn().map_err(|e| format!("打开文件夹失败: {e}"))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dedup_aggregate_paths;
+
+    #[test]
+    fn dedup_removes_exact_duplicates_order_preserving() {
+        // 入参已 canonicalize;去重按精确路径,保留首次顺序。
+        // 大小写差异不在此处折叠(交给 canonicalize 按平台处理),故大小写不同视为不同仓。
+        let out = dedup_aggregate_paths(vec![
+            "/ws/repo-a".to_string(),
+            "/ws/repo-b".to_string(),
+            "/ws/repo-a".to_string(), // 完全重复 → 去重
+        ]);
+        assert_eq!(out, vec!["/ws/repo-a", "/ws/repo-b"]);
+    }
+
+    #[test]
+    fn dedup_empty_stays_empty() {
+        assert!(dedup_aggregate_paths(vec![]).is_empty());
+    }
 }

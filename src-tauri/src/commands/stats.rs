@@ -250,7 +250,7 @@ fn read_commits_cache(
 /// WorkingLogsMissing:当前 commit 有 additions(total > 0),且 AI 桶完全为 0
 /// (ai_additions==0 && ai_accepted==0),且 unknown_additions > 0。
 /// 基于上游字段定义:`unknown_additions` = "lines with no attestation at all"(stats.rs:22)。
-fn derive_note_kind(
+pub(crate) fn derive_note_kind(
     stats: &git_ai::stats::AiStats,
     total: u64,
     is_merge: bool,

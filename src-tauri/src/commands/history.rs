@@ -214,7 +214,7 @@ pub async fn get_history(
     let recent = commits::list_recent(&repo_path_buf, MAX_COMMITS_HARD_CAP)
         .await
         .map_err(|e| e.to_string())?;
-    let truncated = recent.len() >= MAX_COMMITS_HARD_CAP as usize;
+    let truncated = is_window_truncated(&recent, MAX_COMMITS_HARD_CAP as usize, range_start);
     let window = filter_by_range(&recent, &range, now);
 
     if window.is_empty() {
@@ -235,93 +235,11 @@ pub async fn get_history(
         });
     }
 
-    // 4. 一次性拉全量 git notes oid map
-    let oid_map = git_ai::notes::read_all_notes_oids(&repo_path_buf)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    // 4.5. 算 `.git-ai-ignore` 当前 hash(P10 #29)
-    let current_ignore_hash =
-        git_ai::ignore::compute_ignore_hash(&repo_path_buf).map_err(|e| e.to_string())?;
-
-    // 5. batch_get cache
+    // 4-8. 解析 window 内各 commit 的 stats(notes oid + ignore hash + cache 命中 + miss 并发 +
+    // 写回)。抽到 resolve_window_stats 与 get_aggregate_history 共用,避免复制缓存/并发/写回逻辑。
     let shas: Vec<String> = window.iter().map(|c| c.sha.clone()).collect();
-    let cached_map = {
-        let conn_arc = state.db.clone();
-        let repo_clone = repo_path.clone();
-        let shas_clone = shas.clone();
-        tokio::task::spawn_blocking(move || {
-            let conn = conn_arc
-                .lock()
-                .map_err(|_| AppError::Other("db 锁中毒".into()))?;
-            stats_cache::batch_get(&conn, &repo_clone, &shas_clone)
-        })
-        .await
-        .map_err(|e| format!("spawn_blocking 失败: {e}"))?
-        .map_err(|e| e.to_string())?
-    };
-
-    // 6. 区分命中 / miss(失效模型:cache 行存在但 notes_oid 或 ignore_hash 不一致也算 miss)
-    let (mut hits, miss_shas) =
-        split_hits_and_misses(&shas, &oid_map, &current_ignore_hash, &cached_map);
-
-    // 7. miss 并发跑 git-ai stats <sha> --json
-    let miss_results: Vec<(String, Result<git_ai::stats::AiStats, AppError>)> =
-        stream::iter(miss_shas.clone())
-            .map(|sha| {
-                let bin = git_ai_bin.clone();
-                let rp = repo_path_buf.clone();
-                async move {
-                    let stats = git_ai::stats::run_stats(&bin, &rp, Some(&sha)).await;
-                    (sha, stats)
-                }
-            })
-            .buffer_unordered(STATS_CONCURRENCY)
-            .collect()
-            .await;
-
-    // 把成功项写入内存 hits 并 put 回 cache。失败项收集到 failed_shas,前端必须显式提示用户,
-    // 而不是让 0 桶兜底污染派生率(评审 A no-fallback)。
-    let mut put_buf: Vec<(String, String, git_ai::stats::AiStats)> = Vec::new();
-    let mut failed_shas: Vec<String> = Vec::new();
-    for (sha, res) in miss_results {
-        match res {
-            Ok(stats) => {
-                let oid = oid_map.get(&sha).cloned().unwrap_or_default();
-                hits.insert(sha.clone(), stats.clone());
-                put_buf.push((sha, oid, stats));
-            }
-            Err(e) => {
-                log::warn!("git-ai stats {} 失败: {}", sha, e);
-                failed_shas.push(sha);
-            }
-        }
-    }
-    let cache_hits = (shas.len() - miss_shas.len()) as u32;
-
-    // 8. 批量写回 cache(单事务)
-    if !put_buf.is_empty() {
-        let conn_arc = state.db.clone();
-        let repo_clone = repo_path.clone();
-        let ignore_hash_clone = current_ignore_hash.clone();
-        tokio::task::spawn_blocking(move || -> Result<(), AppError> {
-            let mut conn = conn_arc
-                .lock()
-                .map_err(|_| AppError::Other("db 锁中毒".into()))?;
-            let tx = conn
-                .transaction()
-                .map_err(|e| AppError::Other(format!("tx begin: {e}")))?;
-            for (sha, oid, stats) in &put_buf {
-                stats_cache::put(&tx, &repo_clone, sha, oid, &ignore_hash_clone, stats)?;
-            }
-            tx.commit()
-                .map_err(|e| AppError::Other(format!("tx commit: {e}")))?;
-            Ok(())
-        })
-        .await
-        .map_err(|e| format!("spawn_blocking 写 cache 失败: {e}"))?
-        .map_err(|e| e.to_string())?;
-    }
+    let (hits, cache_hits, failed_shas) =
+        resolve_window_stats(&repo_path, &shas, &git_ai_bin, &state).await?;
 
     // 9. 组装 per_commit + 按本地日期分桶
     let per_commit: Vec<PerCommitStat> = window
@@ -353,6 +271,639 @@ pub async fn get_history(
             cached_repo_total,
             failed_shas,
             truncated,
+            took_ms: started.elapsed().as_millis() as u64,
+        },
+    })
+}
+
+/// 解析一个 window(已过滤的 commit 集)内各 commit 的 stats:
+/// notes oid map + `.git-ai-ignore` hash → batch_get 缓存 → split 命中/miss →
+/// miss 用 `buffer_unordered(STATS_CONCURRENCY)` 并发跑 `git-ai stats <sha>` → 写回 cache。
+///
+/// 返回 `(sha→stats 命中表, 缓存命中数, 采集失败的 sha)`。`get_history`(单仓)与
+/// `get_aggregate_history`(跨仓,按仓循环调用)共用,避免两处复制缓存/并发/写回逻辑。
+/// 失败的 sha **不**进命中表(调用方以 0 桶占位 + 显式 failed 提示,绝不当真实数据)。
+async fn resolve_window_stats(
+    repo_path: &str,
+    shas: &[String],
+    git_ai_bin: &Path,
+    state: &AppState,
+) -> Result<(HashMap<String, git_ai::stats::AiStats>, u32, Vec<String>), String> {
+    let repo_path_buf = PathBuf::from(repo_path);
+
+    let oid_map = git_ai::notes::read_all_notes_oids(&repo_path_buf)
+        .await
+        .map_err(|e| e.to_string())?;
+    let current_ignore_hash =
+        git_ai::ignore::compute_ignore_hash(&repo_path_buf).map_err(|e| e.to_string())?;
+
+    let cached_map = {
+        let conn_arc = state.db.clone();
+        let repo_clone = repo_path.to_string();
+        let shas_clone = shas.to_vec();
+        tokio::task::spawn_blocking(move || {
+            let conn = conn_arc
+                .lock()
+                .map_err(|_| AppError::Other("db 锁中毒".into()))?;
+            stats_cache::batch_get(&conn, &repo_clone, &shas_clone)
+        })
+        .await
+        .map_err(|e| format!("spawn_blocking 失败: {e}"))?
+        .map_err(|e| e.to_string())?
+    };
+
+    let (mut hits, miss_shas) =
+        split_hits_and_misses(shas, &oid_map, &current_ignore_hash, &cached_map);
+
+    let miss_results: Vec<(String, Result<git_ai::stats::AiStats, AppError>)> =
+        stream::iter(miss_shas.clone())
+            .map(|sha| {
+                let bin = git_ai_bin.to_path_buf();
+                let rp = repo_path_buf.clone();
+                async move {
+                    let stats = git_ai::stats::run_stats(&bin, &rp, Some(&sha)).await;
+                    (sha, stats)
+                }
+            })
+            .buffer_unordered(STATS_CONCURRENCY)
+            .collect()
+            .await;
+
+    let mut put_buf: Vec<(String, String, git_ai::stats::AiStats)> = Vec::new();
+    let mut failed_shas: Vec<String> = Vec::new();
+    for (sha, res) in miss_results {
+        match res {
+            Ok(stats) => {
+                let oid = oid_map.get(&sha).cloned().unwrap_or_default();
+                hits.insert(sha.clone(), stats.clone());
+                put_buf.push((sha, oid, stats));
+            }
+            Err(e) => {
+                log::warn!("git-ai stats {} 失败: {}", sha, e);
+                failed_shas.push(sha);
+            }
+        }
+    }
+    let cache_hits = (shas.len() - miss_shas.len()) as u32;
+
+    if !put_buf.is_empty() {
+        let conn_arc = state.db.clone();
+        let repo_clone = repo_path.to_string();
+        let ignore_hash_clone = current_ignore_hash.clone();
+        tokio::task::spawn_blocking(move || -> Result<(), AppError> {
+            let mut conn = conn_arc
+                .lock()
+                .map_err(|_| AppError::Other("db 锁中毒".into()))?;
+            let tx = conn
+                .transaction()
+                .map_err(|e| AppError::Other(format!("tx begin: {e}")))?;
+            for (sha, oid, stats) in &put_buf {
+                stats_cache::put(&tx, &repo_clone, sha, oid, &ignore_hash_clone, stats)?;
+            }
+            tx.commit()
+                .map_err(|e| AppError::Other(format!("tx commit: {e}")))?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("spawn_blocking 写 cache 失败: {e}"))?
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok((hits, cache_hits, failed_shas))
+}
+
+// ============ 提交归因(Stats 页):单仓 commit 浏览器的数据源 ============
+// 与 get_history(时间窗口聚合 + 分桶,Dashboard 用)正交:这里只要"最近 N 个 commit 各自的
+// AI 三桶 + 作者/标题元信息"的扁平列表,供 Stats 页 commit 列表 + 详情渲染。复用 resolve_window_stats
+// 的缓存/并发/写回,不重造 git-ai 子进程逻辑。读 current_repo(下钻焦点),与跨仓聚合无关。
+
+/// 单个 commit 的元信息 + AI 三桶(commit 浏览器每行的数据)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct CommitWithStats {
+    pub sha: String,
+    pub short: String,
+    /// ISO-8601 with TZ。
+    pub authored_at: String,
+    pub author_name: String,
+    pub author_email: String,
+    pub subject: String,
+    pub is_merge: bool,
+    pub stats: git_ai::stats::AiStats,
+    /// 提示性 note(merge / 空新增 / 缺 hook),复用 stats.rs::derive_note_kind 单一口径,前端渲染注脚条。
+    pub note_kind: Option<crate::commands::stats::NoteKind>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct RecentCommitsPayload {
+    pub commits: Vec<CommitWithStats>,
+    /// `git-ai stats <sha>` 失败的 commit:在 commits 里以 0 桶占位,前端必须显式提示,绝不当真实数据。
+    pub failed_shas: Vec<String>,
+    /// `list_recent` 取到刚好 max_count 条 ⇒ 仓库可能有更老 commit 未纳入,前端显式提示。
+    pub truncated: bool,
+    /// 命中 SQLite cache 的 commit 数(UI 可透出"x / N 命中缓存")。
+    pub cache_hits: u32,
+    pub took_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
+pub enum RecentCommitsResult {
+    Ok { payload: RecentCommitsPayload },
+    Degraded { reason: DegradedReason },
+}
+
+/// 最近 N 个 commit + 各自 AI 三桶(单仓提交归因浏览器数据源)。
+///
+/// 流程:`list_recent(max_count)` → `resolve_window_stats`(缓存命中/miss 并发/写回)→ 组装。
+/// 预期空态(未选仓库 / git-ai 未装)→ `Ok(Degraded)`;真失败 → `Err(String)`。失败的单 commit
+/// 进 `failed_shas`、在 commits 里以 0 桶占位,绝不当真实数据(响亮失败)。
+#[tauri::command]
+pub async fn list_recent_commits_with_stats(
+    max_count: u32,
+    state: State<'_, AppState>,
+) -> Result<RecentCommitsResult, String> {
+    let started = Instant::now();
+    let repo_path: String = {
+        let g = state
+            .current_repo
+            .read()
+            .map_err(|_| "current_repo 锁中毒".to_string())?;
+        match g.as_ref() {
+            Some(r) => r.path.clone(),
+            None => {
+                return Ok(RecentCommitsResult::Degraded {
+                    reason: DegradedReason::RepoMissing,
+                });
+            }
+        }
+    };
+    let repo_path_buf = PathBuf::from(&repo_path);
+
+    let git_ai_bin = match git_ai::binary::resolve() {
+        Ok(p) => p,
+        Err(_) => {
+            return Ok(RecentCommitsResult::Degraded {
+                reason: DegradedReason::GitAiMissing,
+            });
+        }
+    };
+
+    let cap = max_count.clamp(1, MAX_COMMITS_HARD_CAP);
+    let recent = commits::list_recent(&repo_path_buf, cap)
+        .await
+        .map_err(|e| e.to_string())?;
+    // 取到刚好 cap 条 ⇒ 可能还有更老的没拿到。
+    let truncated = recent.len() == cap as usize;
+
+    if recent.is_empty() {
+        return Ok(RecentCommitsResult::Ok {
+            payload: RecentCommitsPayload {
+                commits: vec![],
+                failed_shas: vec![],
+                truncated,
+                cache_hits: 0,
+                took_ms: started.elapsed().as_millis() as u64,
+            },
+        });
+    }
+
+    let shas: Vec<String> = recent.iter().map(|c| c.sha.clone()).collect();
+    let (hits, cache_hits, failed_shas) =
+        resolve_window_stats(&repo_path, &shas, &git_ai_bin, &state).await?;
+
+    let commits: Vec<CommitWithStats> = recent
+        .iter()
+        .map(|c| {
+            let stats = hits.get(&c.sha).cloned().unwrap_or_default();
+            let total = stats.total_additions();
+            let note_kind = crate::commands::stats::derive_note_kind(&stats, total, c.is_merge);
+            CommitWithStats {
+                sha: c.sha.clone(),
+                short: c.short.clone(),
+                authored_at: c.authored_at.clone(),
+                author_name: c.author_name.clone(),
+                author_email: c.author_email.clone(),
+                subject: c.subject.clone(),
+                is_merge: c.is_merge,
+                stats,
+                note_kind,
+            }
+        })
+        .collect();
+
+    Ok(RecentCommitsResult::Ok {
+        payload: RecentCommitsPayload {
+            commits,
+            failed_shas,
+            truncated,
+            cache_hits,
+            took_ms: started.elapsed().as_millis() as u64,
+        },
+    })
+}
+
+// ============ 跨仓聚合(M2):Dashboard 默认跨仓的数据源 ============
+// 与单仓 get_history 正交:get_history 读 current_repo(下钻焦点),get_aggregate_history 读
+// AppSettings.aggregate_repos(用户显式勾选集)。单仓下钻命令保持不动,LowAiShare 等不受影响。
+
+/// 跨仓 per-commit:带 repo_path 以支持跨仓识别与下钻。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AggregatePerCommit {
+    pub repo_path: String,
+    pub sha: String,
+    pub short: String,
+    pub authored_at: String,
+    pub is_merge: bool,
+    pub stats: git_ai::stats::AiStats,
+}
+
+/// 整仓采集失败(list_recent / notes / cache 等)。前端必须显式列出"未纳入统计",
+/// 其数据**绝不**当 0 并入聚合(响亮失败)。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FailedRepo {
+    pub repo_path: String,
+    pub reason: String,
+}
+
+/// 单 commit 采集失败(`git-ai stats` 子进程失败)。带 repo_path 限定:跨仓 sha 不全局唯一。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct FailedCommit {
+    pub repo_path: String,
+    pub sha: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AggregateHistoryPayload {
+    pub range: TimeRange,
+    pub range_start_unix_ms: i64,
+    pub range_end_unix_ms: i64,
+    pub total_commits_in_window: u32,
+    pub per_commit: Vec<AggregatePerCommit>,
+    pub daily_buckets: Vec<DailyBucket>,
+    pub cache_hits: u32,
+    /// 采集失败的仓(数据未并入聚合,前端必须显式提示)。
+    pub failed_repos: Vec<FailedRepo>,
+    /// 单 commit 采集失败(0 桶占位,前端必须显式提示)。
+    pub failed_shas: Vec<FailedCommit>,
+    /// 命中 500 cap 的仓(可能有更老 commit 未计入,前端显式提示)。
+    pub truncated_repos: Vec<String>,
+    pub took_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
+pub enum AggregateHistoryResult {
+    Ok { payload: AggregateHistoryPayload },
+    Degraded { reason: AggregateDegradedReason },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AggregateDegradedReason {
+    /// `aggregate_repos` 为空(用户尚未勾选任何仓库)—— 预期空态,前端引导去勾选。
+    NoReposSelected,
+    /// git-ai 二进制缺失(全局前置,所有仓都做不了)。
+    GitAiMissing,
+}
+
+/// 单仓在聚合里的切片产物。
+struct AggregateRepoSlice {
+    per_commit: Vec<AggregatePerCommit>,
+    cache_hits: u32,
+    truncated: bool,
+    failed_shas: Vec<String>,
+}
+
+/// 采集单个仓库在 range 窗口内的 per-commit 切片(list_recent → filter → 可选作者过滤 →
+/// resolve_window_stats)。整仓级失败返回 `Err(reason)`,由调用方记入 failed_repos、不拖垮其余仓。
+///
+/// `only_mine_email`:`Some(email)` 时只保留 author_email 命中该邮箱的 commit(「只看我」口径);
+/// `None` 时不按作者过滤(全作者聚合)。
+async fn gather_aggregate_repo(
+    repo_path: &str,
+    range: &TimeRange,
+    now: DateTime<Local>,
+    git_ai_bin: &Path,
+    only_mine_email: Option<&str>,
+    state: &AppState,
+) -> Result<AggregateRepoSlice, String> {
+    let repo_path_buf = PathBuf::from(repo_path);
+    let recent = commits::list_recent(&repo_path_buf, MAX_COMMITS_HARD_CAP)
+        .await
+        .map_err(|e| e.to_string())?;
+    let range_start = time_range_bounds(range, now).0;
+    let truncated = is_window_truncated(&recent, MAX_COMMITS_HARD_CAP as usize, range_start);
+    let in_range = filter_by_range(&recent, range, now);
+    let window = match only_mine_email {
+        Some(email) => filter_by_author(&in_range, email),
+        None => in_range,
+    };
+    if window.is_empty() {
+        return Ok(AggregateRepoSlice {
+            per_commit: vec![],
+            cache_hits: 0,
+            truncated,
+            failed_shas: vec![],
+        });
+    }
+    let shas: Vec<String> = window.iter().map(|c| c.sha.clone()).collect();
+    let (hits, cache_hits, failed_shas) =
+        resolve_window_stats(repo_path, &shas, git_ai_bin, state).await?;
+    let per_commit = window
+        .iter()
+        .map(|c| AggregatePerCommit {
+            repo_path: repo_path.to_string(),
+            sha: c.sha.clone(),
+            short: c.short.clone(),
+            authored_at: c.authored_at.clone(),
+            is_merge: c.is_merge,
+            stats: hits.get(&c.sha).cloned().unwrap_or_default(),
+        })
+        .collect();
+    Ok(AggregateRepoSlice {
+        per_commit,
+        cache_hits,
+        truncated,
+        failed_shas,
+    })
+}
+
+/// 跨仓聚合历史:Dashboard 默认视图的数据源。读 `aggregate_repos`,按仓**顺序**采集
+/// (每仓内部 per-commit `buffer_unordered(8)`,仓间串行 ⇒ 全局最多 8 子进程、单层 fan-out
+/// 无死锁;跨仓并行留作后续优化),合并 per_commit 后按本地日期分桶。
+///
+/// 失败三分:空集 → `Degraded(NoReposSelected)`;全仓失败 → `Err`;部分仓失败 →
+/// `Ok` + `failed_repos`(成功仓正常聚合,失败仓显式列出、绝不当 0 并入)。
+///
+/// `only_mine`(默认前端传 true):「只看我」口径 —— 逐仓解析该仓生效的 git user.email,只统计
+/// 命中的 commit。某仓未配置 user.email 时无法确定「我」,该仓显式记入 failed_repos(响亮失败,
+/// 绝不退化成全作者聚合)。
+#[tauri::command]
+pub async fn get_aggregate_history(
+    range: TimeRange,
+    only_mine: bool,
+    state: State<'_, AppState>,
+) -> Result<AggregateHistoryResult, String> {
+    let started = Instant::now();
+    let now = Local::now();
+    let (range_start, range_end) = time_range_bounds(&range, now);
+
+    let repos = crate::state::AppSettings::load().aggregate_repos;
+    if repos.is_empty() {
+        return Ok(AggregateHistoryResult::Degraded {
+            reason: AggregateDegradedReason::NoReposSelected,
+        });
+    }
+
+    let git_ai_bin = match git_ai::binary::resolve() {
+        Ok(p) => p,
+        Err(_) => {
+            return Ok(AggregateHistoryResult::Degraded {
+                reason: AggregateDegradedReason::GitAiMissing,
+            });
+        }
+    };
+
+    let mut all_per_commit: Vec<AggregatePerCommit> = Vec::new();
+    let mut failed_repos: Vec<FailedRepo> = Vec::new();
+    let mut failed_shas: Vec<FailedCommit> = Vec::new();
+    let mut truncated_repos: Vec<String> = Vec::new();
+    let mut cache_hits: u32 = 0;
+
+    for repo_path in &repos {
+        // 「只看我」:逐仓解析生效的 git user.email。该仓未配置(local/global 皆无)⇒ 无法确定
+        // 「我」是谁,显式记 failed_repo 并跳过,绝不退化成全作者(响亮失败)。
+        let only_mine_email = if only_mine {
+            match crate::commands::repo::read_git_user_email(&PathBuf::from(repo_path)).await {
+                Some(email) => Some(email),
+                None => {
+                    failed_repos.push(FailedRepo {
+                        repo_path: repo_path.clone(),
+                        reason: "「只看我」口径下该仓未配置 git user.email,无法确定当前用户,已排除"
+                            .to_string(),
+                    });
+                    continue;
+                }
+            }
+        } else {
+            None
+        };
+        match gather_aggregate_repo(
+            repo_path,
+            &range,
+            now,
+            &git_ai_bin,
+            only_mine_email.as_deref(),
+            &state,
+        )
+        .await
+        {
+            Ok(slice) => {
+                cache_hits += slice.cache_hits;
+                if slice.truncated {
+                    truncated_repos.push(repo_path.clone());
+                }
+                for sha in slice.failed_shas {
+                    failed_shas.push(FailedCommit {
+                        repo_path: repo_path.clone(),
+                        sha,
+                    });
+                }
+                all_per_commit.extend(slice.per_commit);
+            }
+            Err(reason) => {
+                log::warn!("聚合仓库 {} 采集失败: {}", repo_path, reason);
+                failed_repos.push(FailedRepo {
+                    repo_path: repo_path.clone(),
+                    reason,
+                });
+            }
+        }
+    }
+
+    // 全部仓都失败 ⇒ 无任何可信数据,响亮失败(Err)。注意区别于"窗口空":窗口空时各仓
+    // gather 返回 Ok(空切片)、failed_repos 为空,走下面的 Ok(空聚合)。
+    if failed_repos.len() == repos.len() {
+        return Err(format!(
+            "全部 {} 个聚合仓库采集失败,无可用数据(示例:{})",
+            repos.len(),
+            failed_repos
+                .first()
+                .map(|f| f.reason.as_str())
+                .unwrap_or("")
+        ));
+    }
+
+    // 跨仓合并后全局按 authored_at 倒序:各仓内部已倒序,但仓间是顺序拼接 —— 不全局排序会让
+    // 前端"最近 commit"(slice 头 N 条)只取到第一个仓的,漏掉其它仓更新的 commit(红队 M4#5)。
+    // 解析失败的 authored_at 排到末尾(罕见)。
+    all_per_commit.sort_by(|a, b| {
+        let pa = DateTime::parse_from_rfc3339(&a.authored_at).ok();
+        let pb = DateTime::parse_from_rfc3339(&b.authored_at).ok();
+        pb.cmp(&pa)
+    });
+
+    // 合并所有仓 per_commit 后按本地日期分桶:纯按行加法(saturating_add),**不预算率**,
+    // AI 占比由前端按 sum 后再算,避免"各仓先算率再平均"。
+    let merged: Vec<PerCommitStat> = all_per_commit
+        .iter()
+        .map(|c| PerCommitStat {
+            sha: c.sha.clone(),
+            short: c.short.clone(),
+            authored_at: c.authored_at.clone(),
+            is_merge: c.is_merge,
+            stats: c.stats.clone(),
+        })
+        .collect();
+    let daily_buckets = bucket_by_local_date(&merged);
+
+    Ok(AggregateHistoryResult::Ok {
+        payload: AggregateHistoryPayload {
+            range,
+            range_start_unix_ms: range_start.timestamp_millis(),
+            range_end_unix_ms: range_end.timestamp_millis(),
+            total_commits_in_window: all_per_commit.len() as u32,
+            per_commit: all_per_commit,
+            daily_buckets,
+            cache_hits,
+            failed_repos,
+            failed_shas,
+            truncated_repos,
+            took_ms: started.elapsed().as_millis() as u64,
+        },
+    })
+}
+
+// ============ 跨仓「本地未提交」聚合:Dashboard 的独立快照卡数据源 ============
+// 与时间窗口的"已提交"聚合正交:这是**当前**工作树未提交改动(`git ai status`)的跨仓求和,
+// 没有 commit 时间、不进时间序列、不缓存(工作树易变),前端用独立卡呈现、只在窗口含"现在"时显示。
+
+/// 单仓的未提交切片(三桶)。只收录有改动(total>0)的仓,供卡片列出/排序。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct WorkingRepoSlice {
+    pub repo_path: String,
+    pub human_additions: u64,
+    pub unknown_additions: u64,
+    pub ai_additions: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct AggregateWorkingStatusPayload {
+    /// 有未提交改动(三桶 total>0)的仓库数。
+    pub repos_with_changes: u32,
+    pub human_additions: u64,
+    pub unknown_additions: u64,
+    pub ai_additions: u64,
+    /// 仅含有改动的仓,按 ai_additions 倒序。
+    pub per_repo: Vec<WorkingRepoSlice>,
+    /// 读取 `git ai status` 失败的仓(无 HEAD / 子进程错误等),显式列出,绝不当 0 并入。
+    pub failed_repos: Vec<FailedRepo>,
+    pub took_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
+pub enum AggregateWorkingStatusResult {
+    Ok {
+        payload: AggregateWorkingStatusPayload,
+    },
+    Degraded {
+        reason: AggregateDegradedReason,
+    },
+}
+
+/// 跨仓「本地未提交」聚合:对 `aggregate_repos` 逐仓跑 `git ai status --json`,把三桶求和。
+///
+/// 与 `get_aggregate_history` 同样的失败三分:空集 → `Degraded(NoReposSelected)`;全仓失败 →
+/// `Err`;部分失败 → `Ok` + `failed_repos`。工作树易变 ⇒ **不缓存**,每次调用现读;`git ai status`
+/// 只看工作树,单仓很快(共享 15s `STATS_TIMEOUT`)。天然"只看我"(就是本机当前未提交改动),
+/// 不受 Dashboard 的 only_mine 开关影响。
+#[tauri::command]
+pub async fn get_aggregate_working_status(
+    state: State<'_, AppState>,
+) -> Result<AggregateWorkingStatusResult, String> {
+    let started = Instant::now();
+    let _ = &state; // 不读 current_repo / db:聚合集来自 settings,工作树状态不缓存
+
+    let repos = crate::state::AppSettings::load().aggregate_repos;
+    if repos.is_empty() {
+        return Ok(AggregateWorkingStatusResult::Degraded {
+            reason: AggregateDegradedReason::NoReposSelected,
+        });
+    }
+    let git_ai_bin = match git_ai::binary::resolve() {
+        Ok(p) => p,
+        Err(_) => {
+            return Ok(AggregateWorkingStatusResult::Degraded {
+                reason: AggregateDegradedReason::GitAiMissing,
+            });
+        }
+    };
+
+    let mut human_additions: u64 = 0;
+    let mut unknown_additions: u64 = 0;
+    let mut ai_additions: u64 = 0;
+    let mut per_repo: Vec<WorkingRepoSlice> = Vec::new();
+    let mut failed_repos: Vec<FailedRepo> = Vec::new();
+
+    for repo_path in &repos {
+        match git_ai::stats::run_status(&git_ai_bin, &PathBuf::from(repo_path)).await {
+            Ok(status) => {
+                let st = &status.stats;
+                human_additions = human_additions.saturating_add(st.human_additions);
+                unknown_additions = unknown_additions.saturating_add(st.unknown_additions);
+                ai_additions = ai_additions.saturating_add(st.ai_additions);
+                if st.total_additions() > 0 {
+                    per_repo.push(WorkingRepoSlice {
+                        repo_path: repo_path.clone(),
+                        human_additions: st.human_additions,
+                        unknown_additions: st.unknown_additions,
+                        ai_additions: st.ai_additions,
+                    });
+                }
+            }
+            Err(e) => {
+                log::warn!("聚合仓库 {} 读取未提交状态失败: {}", repo_path, e);
+                failed_repos.push(FailedRepo {
+                    repo_path: repo_path.clone(),
+                    reason: e.to_string(),
+                });
+            }
+        }
+    }
+
+    if failed_repos.len() == repos.len() {
+        return Err(format!(
+            "全部 {} 个聚合仓库读取未提交状态失败(示例:{})",
+            repos.len(),
+            failed_repos
+                .first()
+                .map(|f| f.reason.as_str())
+                .unwrap_or("")
+        ));
+    }
+
+    per_repo.sort_by_key(|s| std::cmp::Reverse(s.ai_additions));
+
+    Ok(AggregateWorkingStatusResult::Ok {
+        payload: AggregateWorkingStatusPayload {
+            repos_with_changes: per_repo.len() as u32,
+            human_additions,
+            unknown_additions,
+            ai_additions,
+            per_repo,
+            failed_repos,
             took_ms: started.elapsed().as_millis() as u64,
         },
     })
@@ -779,6 +1330,42 @@ pub fn filter_by_range(
         .collect()
 }
 
+/// 「只看我」口径:只保留 author_email 命中 `email` 的 commit(大小写不敏感)。
+/// 纯函数,便于单测;email 入参应已 trim + lowercase(由 `read_git_user_email` 保证)。
+pub fn filter_by_author(commits: &[CommitBrief], email: &str) -> Vec<CommitBrief> {
+    commits
+        .iter()
+        .filter(|c| c.author_email.eq_ignore_ascii_case(email))
+        .cloned()
+        .collect()
+}
+
+/// 判断 500 cap 是否**真的**可能漏算了窗口内的更老 commit。
+///
+/// 关键:`list_recent(cap)` 取的是"全仓最近 cap 条"(与时间窗口无关),所以**不能**仅凭
+/// `recent.len() >= cap` 就报截断 —— 否则只要仓库历史总提交 ≥cap,哪怕只看"今天"也会误报
+/// (今天的 commit 明明都在最近 cap 条里,根本没漏)。
+///
+/// 真正的截断只在:取满 cap 条,**且**这 cap 条里最旧一条仍晚于窗口起点 —— 说明窗口起点到
+/// 该最旧 commit 之间可能还有没被取到的窗口内 commit。否则(最旧 commit 已早于窗口起点)
+/// 窗口被这 cap 条完整覆盖,不算截断。`list_recent` 按时间倒序,末尾即最旧。纯函数,便于单测。
+pub fn is_window_truncated(
+    recent: &[CommitBrief],
+    cap: usize,
+    range_start: DateTime<Local>,
+) -> bool {
+    if recent.len() < cap {
+        return false;
+    }
+    match recent
+        .last()
+        .and_then(|c| DateTime::parse_from_rfc3339(&c.authored_at).ok())
+    {
+        Some(oldest) => oldest.with_timezone(&Local) > range_start,
+        None => true, // 最旧 commit 时间解析失败:保守按截断处理(极罕见,%cI 已是 RFC3339)
+    }
+}
+
 fn start_of_day(dt: DateTime<Local>) -> DateTime<Local> {
     Local
         .with_ymd_and_hms(dt.year(), dt.month(), dt.day(), 0, 0, 0)
@@ -894,6 +1481,55 @@ mod tests {
         let kept = filter_by_range(&commits, &TimeRange::LastNDays { days: 7 }, now);
         let shas: Vec<_> = kept.iter().map(|c| c.sha.as_str()).collect();
         assert_eq!(shas, vec!["aaaaaaa1", "aaaaaaa2"]);
+    }
+
+    #[test]
+    fn truncation_not_flagged_when_window_fully_covered() {
+        // now = 2026-05-12 12:00;窗口 = 今天。仓库总提交达 cap=3(满),但最旧一条在 5-01(早于
+        // 今天 00:00)⇒ 今天的 commit 全在这 3 条里,没漏 ⇒ 不报截断(修复前会误报)。
+        let now = Local.with_ymd_and_hms(2026, 5, 12, 12, 0, 0).unwrap();
+        let range_start = start_of_day(now);
+        let recent = vec![
+            brief("c3", &local_iso(2026, 5, 12, 10, 0, 0)), // 最新
+            brief("c2", &local_iso(2026, 5, 10, 10, 0, 0)),
+            brief("c1", &local_iso(2026, 5, 1, 10, 0, 0)), // 最旧,早于今天起点
+        ];
+        assert!(!is_window_truncated(&recent, 3, range_start));
+    }
+
+    #[test]
+    fn truncation_flagged_when_cap_may_hide_older_window_commits() {
+        // 取满 cap=3,且最旧一条(5-12 08:00)仍晚于窗口起点(今天 00:00)⇒ 起点到 08:00 之间
+        // 可能还有没取到的今天的 commit ⇒ 报截断。
+        let now = Local.with_ymd_and_hms(2026, 5, 12, 12, 0, 0).unwrap();
+        let range_start = start_of_day(now);
+        let recent = vec![
+            brief("c3", &local_iso(2026, 5, 12, 11, 0, 0)),
+            brief("c2", &local_iso(2026, 5, 12, 9, 0, 0)),
+            brief("c1", &local_iso(2026, 5, 12, 8, 0, 0)), // 最旧,仍在今天内
+        ];
+        assert!(is_window_truncated(&recent, 3, range_start));
+    }
+
+    #[test]
+    fn truncation_never_flagged_below_cap() {
+        // 没取满 cap ⇒ 仓库提交本就不足 cap,绝不可能因 cap 漏算 ⇒ 永不报截断。
+        let now = Local.with_ymd_and_hms(2026, 5, 12, 12, 0, 0).unwrap();
+        let recent = vec![brief("c1", &local_iso(2026, 5, 12, 11, 0, 0))];
+        assert!(!is_window_truncated(&recent, 3, start_of_day(now)));
+    }
+
+    #[test]
+    fn filter_by_author_is_case_insensitive_and_self_only() {
+        // 「只看我」口径:只保留命中当前用户邮箱的 commit,大小写不敏感;他人 commit 被剔除。
+        let mut mine = brief("aaaaaaa1", "2026-05-12T10:00:00+08:00");
+        mine.author_email = "Me@Example.com".to_string(); // 大小写混写,应仍命中
+        let mut other = brief("bbbbbbb2", "2026-05-12T11:00:00+08:00");
+        other.author_email = "teammate@example.com".to_string();
+        let commits = vec![mine, other];
+        let kept = filter_by_author(&commits, "me@example.com");
+        let shas: Vec<_> = kept.iter().map(|c| c.sha.as_str()).collect();
+        assert_eq!(shas, vec!["aaaaaaa1"]);
     }
 
     #[test]

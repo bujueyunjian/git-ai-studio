@@ -3,13 +3,7 @@
 // 这不是文案,是逻辑 —— 原先寄居在 copy.ts(i18n 门面)里,随 copy.ts 退役搬到此处。
 // 文案仍走 i18n.t();本模块只负责"payload → 结构化检查项"的组装。
 import i18n from "../i18n";
-import type {
-  AgentHookStatus,
-  CheckItem,
-  DiagnosticOverview,
-  ShimStatus,
-  StatusLevel,
-} from "./types";
+import type { AgentHookStatus, CheckItem, DiagnosticOverview, StatusLevel } from "./types";
 
 // 内部 helper:key 是受控的代码常量,把 i18n.t cast 成宽松签名绕过 typed-key 字面量约束。
 const t = (key: string, opts?: Record<string, unknown>): string =>
@@ -44,7 +38,7 @@ function isLoggedIn(v: string | undefined): boolean {
 /** 把后端聚合 payload 翻译为人话级别的检查项清单。 */
 export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
   const items: CheckItem[] = [];
-  const { report, shim, agents, degraded, repo } = overview;
+  const { report, agents, degraded, repo } = overview;
 
   // 1) git-ai 二进制
   if (degraded?.kind === "git_ai_not_found") {
@@ -82,10 +76,7 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
     });
   }
 
-  // 3) git shim PATH 顺序
-  items.push(shimItem(shim));
-
-  // 4) 登录态
+  // 3) 登录态
   const login = entry(report, "Git AI Login", "Status");
   if (login) {
     const ok = isLoggedIn(login);
@@ -99,7 +90,7 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
     });
   }
 
-  // 5) 是否在 git 仓库内
+  // 4) 是否在 git 仓库内
   const inRepo = entry(report, "Repository", "In repository");
   if (inRepo) {
     const ok = isTruthy(inRepo);
@@ -113,7 +104,7 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
     });
   }
 
-  // 6) repo 自定义 core.hooksPath
+  // 5) repo 自定义 core.hooksPath
   const hooksPath = entry(report, "Git Config", "core.hooksPath");
   if (hooksPath !== undefined && hooksPath !== "") {
     items.push({
@@ -132,13 +123,13 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
     });
   }
 
-  // 7) ~/.claude/settings.json 含 hook
+  // 6) ~/.claude/settings.json 含 hook
   const claude = agents.find((a) => a.agent === "Claude");
   if (claude) {
     items.push(agentHookItem(claude));
   }
 
-  // 8) 至少一个 agent 已配置
+  // 7) 至少一个 agent 已配置
   const configuredCount = agents.filter((a) => a.configured).length;
   items.push({
     id: "any-agent-configured",
@@ -155,7 +146,7 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
         : { to: "hooks", label: t("diagnostic.check.anyAgentConfiguredFix") },
   });
 
-  // 9) 当前 HEAD 是否有 checkpoint
+  // 8) 当前 HEAD 是否有 checkpoint
   const wlc = repo?.working_logs_count ?? 0;
   items.push({
     id: "working-logs",
@@ -167,7 +158,7 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
     impact: wlc > 0 ? undefined : t("diagnostic.check.workingLogsImpactEmpty"),
   });
 
-  // 10) GIT_AI_* 环境变量
+  // 9) GIT_AI_* 环境变量
   const envSection = section(report, "Git AI Environment");
   if (envSection) {
     const anyWarnVar = ENV_VARS_THAT_WARN.find((k) => envSection.raw.includes(`${k}=`));
@@ -183,34 +174,6 @@ export function buildCheckList(overview: DiagnosticOverview): CheckItem[] {
   }
 
   return items;
-}
-
-function shimItem(shim: ShimStatus): CheckItem {
-  if (shim.resolved_paths.length === 0) {
-    return {
-      id: "git-shim",
-      label: t("diagnostic.check.gitShimLabel"),
-      level: "err",
-      detail: t("diagnostic.check.gitShimErrDetail"),
-      impact: t("diagnostic.check.gitShimErrImpact"),
-      fix: { to: "install", label: t("diagnostic.check.gitShimGoInstall") },
-    };
-  }
-  return {
-    id: "git-shim",
-    label: t("diagnostic.check.gitShimLabel"),
-    level: shim.first_is_shim ? "ok" : "err",
-    detail: shim.first_is_shim
-      ? t("diagnostic.check.gitShimFirstIsShimTemplate", { expected: shim.expected_shim })
-      : t("diagnostic.check.gitShimMismatchTemplate", {
-          actual: shim.resolved_paths[0],
-          expected: shim.expected_shim,
-        }),
-    impact: shim.first_is_shim ? undefined : t("diagnostic.check.gitShimMismatchImpact"),
-    fix: shim.first_is_shim
-      ? undefined
-      : { to: "install", label: t("diagnostic.check.gitShimReinstall") },
-  };
 }
 
 function agentHookItem(a: AgentHookStatus): CheckItem {
@@ -238,12 +201,11 @@ function agentHookItem(a: AgentHookStatus): CheckItem {
   };
 }
 
-/** 顶部总览条用的 5 项摘要(粗粒度色块)。 */
+/** 顶部总览条用的 4 项摘要(粗粒度色块)。 */
 export function buildOverviewChips(items: CheckItem[]) {
   const get = (id: string) => items.find((i) => i.id === id);
   return [
     { id: "git-ai-binary", label: t("diagnostic.overviewChips.gitAi"), item: get("git-ai-binary") },
-    { id: "git-shim", label: t("diagnostic.overviewChips.gitShim"), item: get("git-shim") },
     { id: "login", label: t("diagnostic.overviewChips.login"), item: get("login") },
     {
       id: "any-agent-configured",

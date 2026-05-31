@@ -22,19 +22,19 @@ export function StatsBar({ stats, total }: { stats: AiStats; total: number }) {
     {
       key: "human",
       value: stats.human_additions,
-      className: "bg-emerald-500",
+      className: "bg-human",
       title: `human_additions: ${formatInt(stats.human_additions)} 行`,
     },
     {
       key: "unknown",
       value: stats.unknown_additions,
-      className: "bg-muted-foreground/50",
+      className: "bg-unknown",
       title: `unknown_additions: ${formatInt(stats.unknown_additions)} 行(无 attestation)`,
     },
     {
       key: "ai_additions",
       value: stats.ai_additions,
-      className: "bg-primary",
+      className: "bg-ai",
       title: `ai_additions: ${formatInt(stats.ai_additions)} 行`,
     },
   ];
@@ -92,9 +92,9 @@ export function StatsBar({ stats, total }: { stats: AiStats; total: number }) {
 
 function Legend() {
   const items: Array<{ label: string; cls: string }> = [
-    { label: "human", cls: "bg-emerald-500" },
-    { label: "unknown", cls: "bg-muted-foreground/50" },
-    { label: "ai", cls: "bg-primary" },
+    { label: "human", cls: "bg-human" },
+    { label: "unknown", cls: "bg-unknown" },
+    { label: "ai", cls: "bg-ai" },
   ];
   return (
     <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">

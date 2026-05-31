@@ -17,6 +17,7 @@ import type {
   HistoryResult,
   PeopleBreakdownResult,
   RangeSummaryResult,
+  RecentCommitsResult,
   TimeRange,
   ReadFileResult,
   GitAiConfig,
@@ -34,6 +35,9 @@ import type {
   LogKind,
   MockPreset,
   NotesListResult,
+  AggregateRepoEntry,
+  AggregateHistoryResult,
+  AggregateWorkingStatusResult,
   ReleasesPayload,
   RepoEntry,
   SettingsBackup,
@@ -77,6 +81,9 @@ export const detectDirty = (path: string) => call<boolean | null>("detect_dirty"
 export const listRecentRepos = () => call<string[]>("list_recent_repos");
 export const listScanRoots = () => call<string[]>("list_scan_roots");
 export const setScanRoots = (roots: string[]) => call<void>("set_scan_roots", { roots });
+/** 跨仓聚合的显式仓库集合(M1)。get 返回带有效性标注;set 做 normalize + 去重持久化。 */
+export const getAggregateRepos = () => call<AggregateRepoEntry[]>("get_aggregate_repos");
+export const setAggregateRepos = (repos: string[]) => call<void>("set_aggregate_repos", { repos });
 export const restoreLastRepo = () => call<RepoEntry | null>("restore_last_repo");
 export const openInExplorer = (path: string) => call<void>("open_in_explorer", { path });
 
@@ -130,6 +137,18 @@ export const listRecentCommits = (maxCount: number) =>
 
 // History / Dashboard(P5 / P11-A 时间筛选)
 export const getHistory = (range: TimeRange) => call<HistoryResult>("get_history", { range });
+/** 提交归因 commit 浏览器:最近 N 个 commit + 各自 AI 三桶(单仓 current_repo,复用 get_history 缓存)。 */
+export const listRecentCommitsWithStats = (maxCount: number) =>
+  call<RecentCommitsResult>("list_recent_commits_with_stats", { maxCount });
+/**
+ * 跨仓聚合历史(M2):读 aggregate_repos,Dashboard 默认视图数据源。单仓 getHistory 不变。
+ * `onlyMine`(默认 true):「只看我」口径,后端逐仓按生效的 git user.email 过滤 commit。
+ */
+export const getAggregateHistory = (range: TimeRange, onlyMine: boolean) =>
+  call<AggregateHistoryResult>("get_aggregate_history", { range, onlyMine });
+/** 跨仓「本地未提交」快照(`git ai status` 求和)。无参、不缓存、天然只看我。 */
+export const getAggregateWorkingStatus = () =>
+  call<AggregateWorkingStatusResult>("get_aggregate_working_status");
 // range 聚合(hook 覆盖率)独立命令:固有耗时长 + 自带缓存,Dashboard 独立 query 驱动。
 export const getRangeSummary = (range: TimeRange) =>
   call<RangeSummaryResult>("get_range_summary", { range });
@@ -163,7 +182,7 @@ export const readFileAtRef = (ref: string | null, file: string) =>
 export const listAiNotes = () => call<NotesListResult>("list_ai_notes");
 export const showAiNote = (sha: string) => call<ShowNoteResult>("show_ai_note", { sha });
 
-// Diff(任务 #2:Dashboard/Commit 详情跳转代码 — 改动文件 + AI 行)
+// Diff(任务 #2:Dashboard/提交归因 跳转代码 — 改动文件 + AI 行)
 export const listChangedFilesInCommit = (sha: string) =>
   call<ChangedFilesResult>("list_changed_files_in_commit", { sha });
 export const listAiLinesInCommit = (sha: string) =>

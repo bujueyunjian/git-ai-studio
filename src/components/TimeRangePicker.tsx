@@ -168,7 +168,7 @@ export function TimeRangePicker({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="inline-flex items-center gap-1 text-xs font-medium text-slate-500">
+      <label className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
         <CalendarRange className="h-3 w-3" />
         {t("timeRange.pickerLabel")}:
       </label>
@@ -186,7 +186,7 @@ export function TimeRangePicker({
           const next = selectKeyToRange(e.target.value);
           if (next) onChange(next);
         }}
-        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs shadow-xs dark:border-border dark:bg-card"
+        className="rounded-md border border-border bg-card px-2 py-1 text-xs shadow-xs"
       >
         {TIME_RANGE_PRESETS.map((p) => (
           <option key={p.kind} value={p.kind}>
@@ -197,22 +197,22 @@ export function TimeRangePicker({
       </select>
       {isCustom && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <label className="flex items-center gap-1 text-[11px] text-slate-500">
+          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
             {t("timeRange.customStartLabel")}
             <input
               type="date"
               value={customStart}
               onChange={(e) => setCustomStart(e.target.value)}
-              className="rounded-sm border border-slate-200 bg-white px-1.5 py-0.5 text-xs dark:border-border dark:bg-card"
+              className="rounded-sm border border-border bg-card px-1.5 py-0.5 text-xs"
             />
           </label>
-          <label className="flex items-center gap-1 text-[11px] text-slate-500">
+          <label className="flex items-center gap-1 text-[11px] text-muted-foreground">
             {t("timeRange.customEndLabel")}
             <input
               type="date"
               value={customEnd}
               onChange={(e) => setCustomEnd(e.target.value)}
-              className="rounded-sm border border-slate-200 bg-white px-1.5 py-0.5 text-xs dark:border-border dark:bg-card"
+              className="rounded-sm border border-border bg-card px-1.5 py-0.5 text-xs"
             />
           </label>
           <button
@@ -223,9 +223,7 @@ export function TimeRangePicker({
           >
             {t("timeRange.customApply")}
           </button>
-          {customError && (
-            <span className="text-[11px] text-rose-600 dark:text-rose-400">{customError}</span>
-          )}
+          {customError && <span className="text-[11px] text-danger">{customError}</span>}
         </div>
       )}
     </div>

@@ -67,7 +67,9 @@ pub struct KnownHumanMetadata {
     pub extension_version: String,
 }
 
-/// `working_log.rs:105-116`。`additions` 是原始添加行,`additions_sloc` 是源码行(非空非注释)。
+/// `working_log.rs:105-116`。`additions` 是原始添加行;`additions_sloc` 是**去掉纯空白行后**的行数
+/// (上游 `git-ai/src/daemon/checkpoint.rs:1028-1058` `compute_file_line_stats` 仅按
+/// `!line.trim().is_empty()` 过滤,变量名 `non_whitespace_lines` —— **不剔除注释行**)。
 /// 上游所有字段 `#[serde(default)]`,我们一致。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -269,6 +271,33 @@ pub fn parse_jsonl(content: &str) -> Result<Vec<Checkpoint>> {
     Ok(out)
 }
 
+/// 轻量统计一段 `checkpoints.jsonl` 内容里的**有效 checkpoint 行数**(供 Repo 列表行的 badge)。
+///
+/// 口径与 [`parse_jsonl`] 对齐:跳空行 + 跳 `api_version != "checkpoint/1.0.0"` 的行。两点差异是
+/// 为"仓库发现热路径上的计数"做的取舍,且都不影响计数准确性:
+/// 1. 只探测 `api_version` 一个字段(不反序列化整条 Checkpoint),避免 materialize 大 diff 串;
+/// 2. 对坏 JSON 行**宽容跳过**(`parse_jsonl` 会严格报错 —— 那是 Checkpoints 页的权威路径;
+///    badge 不应因某行损坏就让整个仓库发现失败)。
+pub fn count_valid_lines(content: &str) -> u32 {
+    #[derive(serde::Deserialize)]
+    struct ApiVersionProbe {
+        #[serde(default)]
+        api_version: String,
+    }
+    let mut n: u32 = 0;
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Ok(p) = serde_json::from_str::<ApiVersionProbe>(line) {
+            if p.api_version == CHECKPOINT_API_VERSION {
+                n = n.saturating_add(1);
+            }
+        }
+    }
+    n
+}
+
 /// 读 + 解析。文件不存在 / 目录不存在都返回 `Ok(vec![])`(初始态);
 /// 调用方应先用 `probe_presence` 区分 DirMissing(走 degraded) vs FileMissing/FileExists。
 pub async fn read_checkpoints(
@@ -369,6 +398,21 @@ mod tests {
         let bad = format!("{}\n{{not json", ai_agent_line(1));
         let err = parse_jsonl(&bad).unwrap_err();
         assert!(err.to_string().contains("第 2 行"));
+    }
+
+    #[test]
+    fn count_valid_lines_skips_empty_incompatible_and_bad_json() {
+        // 口径与 parse_jsonl 对齐(跳空行 + 跳不兼容 api_version),但对坏 JSON 行宽容跳过而非报错。
+        let incompatible = r#"{"kind":"AiAgent","diff":"","author":"x","entries":[],"timestamp":1,"agent_id":null,"api_version":"checkpoint/2.0.0"}"#;
+        let content = format!(
+            "\n{}\n{}\n{{not json\n{}\n",
+            ai_agent_line(1),
+            incompatible,
+            ai_agent_line(2)
+        );
+        // 仅两条 ai_agent_line 计数;空行 / 不兼容版本 / 坏 JSON 各跳过(不 panic、不报错)
+        assert_eq!(count_valid_lines(&content), 2);
+        assert_eq!(count_valid_lines(""), 0);
     }
 
     #[test]

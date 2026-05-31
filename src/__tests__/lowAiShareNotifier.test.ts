@@ -40,7 +40,7 @@ function base() {
   return {
     enabled: true,
     thresholdPercent: 30,
-    summary: { aiAdditions: 5, totalAdditions: 100, sharePercent: 5 },
+    summary: { aiAdditions: 5, totalAdditions: 100, sharePercent: 5, shareRatio: 0.05 },
     nowMs: NOW,
     repoSwitchedAtMs: null,
     remindIntervalMs: LOW_AI_SHARE_DEFAULT_REMIND_INTERVAL_MINUTES * 60 * 1000,
@@ -80,12 +80,14 @@ describe("summarizeAiShare", () => {
     expect(s.aiAdditions).toBe(35);
     expect(s.totalAdditions).toBe(50);
     expect(s.sharePercent).toBe(70);
+    expect(s.shareRatio).toBeCloseTo(0.7, 10);
   });
 
-  it("总加为 0 时 sharePercent 为 null", () => {
+  it("总加为 0 时 sharePercent / shareRatio 均为 null", () => {
     const s = summarizeAiShare(payload([]));
     expect(s.totalAdditions).toBe(0);
     expect(s.sharePercent).toBeNull();
+    expect(s.shareRatio).toBeNull();
   });
 });
 
@@ -124,7 +126,7 @@ describe("低 AI 占比统计对象 helper", () => {
       ]),
       ["ALICE@example.com"],
     );
-    expect(s).toEqual({ aiAdditions: 30, totalAdditions: 60, sharePercent: 50 });
+    expect(s).toEqual({ aiAdditions: 30, totalAdditions: 60, sharePercent: 50, shareRatio: 0.5 });
   });
 
   it("scope key 区分仓库整体和指定邮箱", () => {
@@ -148,6 +150,7 @@ describe("decideLowAiShareNotification", () => {
         aiAdditions: 1,
         totalAdditions: LOW_AI_SHARE_MIN_TOTAL_ADDITIONS - 1,
         sharePercent: 2,
+        shareRatio: 0.02,
       },
     });
     expect(r).toEqual({ trigger: false, reason: "insufficient_sample" });
@@ -156,7 +159,7 @@ describe("decideLowAiShareNotification", () => {
   it("占比 >= 阈值不触发", () => {
     const r = decideLowAiShareNotification({
       ...base(),
-      summary: { aiAdditions: 30, totalAdditions: 100, sharePercent: 30 },
+      summary: { aiAdditions: 30, totalAdditions: 100, sharePercent: 30, shareRatio: 0.3 },
     });
     expect(r.trigger).toBe(false);
     expect(r.reason).toBe("share_above_threshold");
@@ -165,7 +168,26 @@ describe("decideLowAiShareNotification", () => {
   it("占比 null 不触发", () => {
     const r = decideLowAiShareNotification({
       ...base(),
-      summary: { aiAdditions: 0, totalAdditions: 100, sharePercent: null },
+      summary: { aiAdditions: 0, totalAdditions: 100, sharePercent: null, shareRatio: null },
+    });
+    expect(r.reason).toBe("share_above_threshold");
+  });
+
+  it("阈值判定用精确 ratio:79.6%(round 后=80)仍触发,消除 0.5pp 漏报死区", () => {
+    // 回归:旧实现用 round 后的 sharePercent=80,80>=80 不触发(漏报);精确 0.796*100<80 应触发。
+    const r = decideLowAiShareNotification({
+      ...base(),
+      thresholdPercent: 80,
+      summary: { aiAdditions: 796, totalAdditions: 1000, sharePercent: 80, shareRatio: 0.796 },
+    });
+    expect(r).toEqual({ trigger: true, reason: null });
+  });
+
+  it("精确占比恰好 >= 阈值仍不触发(80.4% 在 80% 阈值之上)", () => {
+    const r = decideLowAiShareNotification({
+      ...base(),
+      thresholdPercent: 80,
+      summary: { aiAdditions: 804, totalAdditions: 1000, sharePercent: 80, shareRatio: 0.804 },
     });
     expect(r.reason).toBe("share_above_threshold");
   });

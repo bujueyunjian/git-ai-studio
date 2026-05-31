@@ -12,18 +12,15 @@
 // - s_(可能 s_::t_)→ sessions(split("::").next() 取 session_key 查 map)。
 //
 // # 隐私
-// - messages 默认折叠,折叠 trigger 显示 lock 图标 + 不上传提示短句(永久,t("common.noUploadNotice"))
-// - 展开后顶部 amber bar 重申完整不上传提示
-// - messages_url 只显示 + 复制,不调用 opener
+// - messages_url 只显示 + 复制,不调用 opener(transcript 可能在远端,UI 不主动拉取)
+//   注:内联 messages 数组自 v1.3.4 起从 spec 移除(E-002),viewer 不再镜像/展示
 
-import type { TFunction } from "i18next";
-import { Activity, Bot, Copy, ExternalLink, FileText, Lock, User } from "lucide-react";
+import { Activity, Bot, Copy, ExternalLink, FileText, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { JsonTree } from "./JsonTree";
 import { cn } from "../lib/cn";
 import {
   classifyNotesHash,
@@ -34,7 +31,6 @@ import {
   type NotesAuthorshipMetadata,
   type NotesFileAttestation,
   type NotesHumanRecord,
-  type NotesMessage,
   type NotesPromptRecord,
   type NotesSessionRecord,
 } from "../lib/types";
@@ -393,7 +389,6 @@ function PromptCard({ hash, record }: { hash: string; record: NotesPromptRecord 
         )}
         {record.messages_url && <MessagesUrlRow url={record.messages_url} />}
         {record.custom_attributes && <CustomAttributesTable attrs={record.custom_attributes} />}
-        <MessagesBlock messages={record.messages} />
       </div>
     </div>
   );
@@ -459,110 +454,6 @@ function CustomAttributesTable({ attrs }: { attrs: Record<string, string> }) {
       </ul>
     </div>
   );
-}
-
-function MessagesBlock({ messages }: { messages: NotesMessage[] }) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  if (!messages || messages.length === 0) {
-    return <div className="text-[11px] text-slate-400">{t("notes.messages.noMessages")}</div>;
-  }
-  return (
-    <div className="rounded-md border border-border">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
-      >
-        <Lock className="h-3 w-3 text-slate-400" />
-        <span className="font-medium">messages</span>
-        <span className="text-[10px] text-slate-400">({messages.length} 条)</span>
-        <span className="ml-auto text-[11px] text-slate-400">
-          {t("notes.messages.collapsedHint")}
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-slate-100 dark:border-border">
-          <div className="border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-            {t("common.noUploadNotice")}
-          </div>
-          <ul className="space-y-2 px-3 py-2">
-            {messages.map((m, i) => (
-              <li key={i}>
-                <MessageItem message={m} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MessageItem({ message }: { message: NotesMessage }) {
-  const { t } = useTranslation();
-  const type = typeof message.type === "string" ? message.type : "unknown";
-  const label = messageTypeLabel(type, t);
-  const tone = messageTypeTone(type);
-  return (
-    <div className="rounded-md border border-slate-200 p-2 dark:border-border">
-      <div className="mb-1 flex items-center gap-2">
-        <span
-          className={cn(
-            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
-            tone,
-          )}
-        >
-          {label}
-        </span>
-        {typeof message.timestamp === "string" && (
-          <span className="font-mono text-[10px] text-slate-400">{message.timestamp}</span>
-        )}
-      </div>
-      {type === "tool_use" ? (
-        <div className="space-y-1 text-xs">
-          {typeof message.name === "string" && (
-            <div>
-              tool:{" "}
-              <code className="font-mono text-purple-700 dark:text-purple-300">{message.name}</code>
-            </div>
-          )}
-          <JsonTree value={message.input} label="input" defaultOpenDepth={1} />
-        </div>
-      ) : (
-        <div className="whitespace-pre-wrap wrap-break-word text-xs text-slate-800 dark:text-slate-200">
-          {typeof message.text === "string" ? message.text : ""}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function messageTypeLabel(type: string, t: TFunction): string {
-  switch (type) {
-    case "user":
-      return t("notes.messages.typeUser");
-    case "assistant":
-      return t("notes.messages.typeAssistant");
-    case "tool_use":
-      return t("notes.messages.typeToolUse");
-    default:
-      return type;
-  }
-}
-
-function messageTypeTone(type: string): string {
-  switch (type) {
-    case "user":
-      return "bg-primary/10 text-primary ring-primary/30";
-    case "assistant":
-      return "bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800";
-    case "tool_use":
-      return "bg-purple-50 text-purple-700 ring-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:ring-purple-800";
-    default:
-      return "bg-slate-50 text-slate-700 ring-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700";
-  }
 }
 
 // ============================================================================

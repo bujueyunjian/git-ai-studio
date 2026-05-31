@@ -6,19 +6,20 @@ production precedents that informed the call.
 
 ## Index
 
-| #   | Title                                                    | Status                     | Date       |
-| --- | -------------------------------------------------------- | -------------------------- | ---------- |
-| 001 | [Router selection](./0001-router-selection.md)            | Proposed (awaiting review) | 2026-05-27 |
-| 002 | [Adopt the shadcn/ui CLI](./0002-shadcn-ui-cli.md)        | Proposed (awaiting review) | 2026-05-27 |
-| 003 | [Tailwind CSS v3 vs v4](./0003-tailwind-v3-vs-v4.md)      | Proposed (awaiting review) | 2026-05-27 |
-| 004 | [Runtime validation for Tauri IPC](./0004-runtime-validation.md) | Proposed (awaiting review) | 2026-05-27 |
-| 005 | [Micro-animation library](./0005-micro-animation-library.md) | **Accepted (amended → `tw-animate-css`)** | 2026-05-28 |
-| 006 | [Auto-update strategy](./0006-auto-update-strategy.md) | **Superseded by [010](./0010-in-app-auto-update.md)** | 2026-05-27 |
-| 007 | [Bundle formats and signing strategy](./0007-bundle-targets-and-signing.md) | Proposed (awaiting review) | 2026-05-27 |
-| 008 | [Conventional Commits and release-automation tool](./0008-conventional-commits-release-tool.md) | **Accepted (Option D)** | 2026-05-27 |
-| 009 | [CI configuration strategy](./0009-ci-configuration.md) | Proposed (awaiting review) | 2026-05-27 |
-| 010 | [In-app auto-update](./0010-in-app-auto-update.md) | **Accepted (supersedes 006)** | 2026-05-29 |
-| 011 | [Desktop companion (Ink pet)](./0011-desktop-companion-ink-pet.md) | **Accepted** | 2026-05-29 |
+| #   | Title                                                                                           | Status                                                | Date       |
+| --- | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ---------- |
+| 001 | [Router selection](./0001-router-selection.md)                                                  | Proposed (awaiting review)                            | 2026-05-27 |
+| 002 | [Adopt the shadcn/ui CLI](./0002-shadcn-ui-cli.md)                                              | Proposed (awaiting review)                            | 2026-05-27 |
+| 003 | [Tailwind CSS v3 vs v4](./0003-tailwind-v3-vs-v4.md)                                            | Proposed (awaiting review)                            | 2026-05-27 |
+| 004 | [Runtime validation for Tauri IPC](./0004-runtime-validation.md)                                | Proposed (awaiting review)                            | 2026-05-27 |
+| 005 | [Micro-animation library](./0005-micro-animation-library.md)                                    | **Accepted (amended → `tw-animate-css`)**             | 2026-05-28 |
+| 006 | [Auto-update strategy](./0006-auto-update-strategy.md)                                          | **Superseded by [010](./0010-in-app-auto-update.md)** | 2026-05-27 |
+| 007 | [Bundle formats and signing strategy](./0007-bundle-targets-and-signing.md)                     | Proposed (awaiting review)                            | 2026-05-27 |
+| 008 | [Conventional Commits and release-automation tool](./0008-conventional-commits-release-tool.md) | **Accepted (Option D)**                               | 2026-05-27 |
+| 009 | [CI configuration strategy](./0009-ci-configuration.md)                                         | Proposed (awaiting review)                            | 2026-05-27 |
+| 010 | [In-app auto-update](./0010-in-app-auto-update.md)                                              | **Accepted (supersedes 006)**                         | 2026-05-29 |
+| 011 | [Desktop companion (Ink pet)](./0011-desktop-companion-ink-pet.md)                              | **Accepted**                                          | 2026-05-29 |
+| 012 | [Cross-repo aggregation scope](./0012-cross-repo-aggregation-scope.md)                          | **Accepted**                                          | 2026-05-30 |
 
 ## Guiding principles
 

@@ -79,6 +79,29 @@ describe("Card / interactive hover", () => {
   });
 });
 
+describe("Card / tone 左色条 + elevated 层级", () => {
+  it("默认 tone=neutral 不加任何 border-l(防现有卡左移 2px)", () => {
+    const html = renderToStaticMarkup(<Card>x</Card>);
+    expect(html).not.toContain("border-l-");
+  });
+
+  it("tone=ai 加 border-l-2 border-l-ai", () => {
+    const html = renderToStaticMarkup(<Card tone="ai">x</Card>);
+    expect(html).toContain("border-l-2");
+    expect(html).toContain("border-l-ai");
+  });
+
+  it("tone=human 加 border-l-2 border-l-human", () => {
+    const html = renderToStaticMarkup(<Card tone="human">x</Card>);
+    expect(html).toContain("border-l-human");
+  });
+
+  it("elevated=true 用 bg-card-elevated;默认用 bg-card", () => {
+    expect(renderToStaticMarkup(<Card elevated>x</Card>)).toContain("bg-card-elevated");
+    expect(renderToStaticMarkup(<Card>x</Card>)).not.toContain("bg-card-elevated");
+  });
+});
+
 describe("Card / padding 档", () => {
   it.each([
     ["sm", "p-3"],

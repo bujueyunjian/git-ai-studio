@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  CheckCircle2,
   ChevronRight,
   Copy,
   Info,
@@ -75,6 +76,8 @@ const AGENT_LABEL: Record<AgentHookStatus["agent"], string> = {
   Cursor: "Cursor",
   Codex: "Codex",
   OpenCode: "OpenCode",
+  Gemini: "Gemini",
+  Pi: "Pi",
 };
 
 function agentLevel(a: AgentHookStatus): StatusLevel {
@@ -245,6 +248,15 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
   const items = useMemo(() => (data ? buildCheckList(data) : []), [data]);
   const chips = useMemo(() => buildOverviewChips(items), [items]);
 
+  // 自动检查清单派生:异常(err/warn)置顶,统计通过数;全绿则默认折叠。
+  const checklist = useMemo(() => {
+    const rank: Record<StatusLevel, number> = { err: 0, warn: 1, ok: 2, muted: 3 };
+    const problems = items.filter((it) => it.level === "err" || it.level === "warn");
+    const passCount = items.filter((it) => it.level === "ok").length;
+    const sorted = [...items].sort((a, b) => rank[a.level] - rank[b.level]);
+    return { problems, passCount, total: items.length, allGreen: problems.length === 0, sorted };
+  }, [items]);
+
   // 任务 #7 catalog 命中:把三份 query 数据组装成 ctx 后跑 evaluateQuickFixes。
   // whoamiQ 在 ok 时 payload 在 .data.payload,degraded 时无 payload。
   const whoamiPayload = whoamiQ.data?.status === "ok" ? whoamiQ.data.payload : undefined;
@@ -310,6 +322,16 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
     [toFix],
   );
 
+  // 健康总判定(健康优先重构):daemon 锁 / catalog 命中 / 检查清单 err|warn 任一存在即"需处理"。
+  // 健康时整页收敛成一张结论卡 + 三个折叠抽屉;有问题时把问题顶到结论卡下方。
+  const daemonProblem =
+    daemonHealthQ.data?.kind === "stale_lock" ||
+    daemonHealthQ.data?.kind === "blocked_lock_unknown_pid";
+  const attentionCount = checklist.problems.length + catalogHits.length + (daemonProblem ? 1 : 0);
+  const healthy = attentionCount === 0;
+  const configuredAgents = data ? data.agents.filter((a) => a.configured).length : 0;
+  const totalAgents = data ? data.agents.length : 0;
+
   // ===== empty state: git-ai not found =====
   if (data?.degraded?.kind === "git_ai_not_found") {
     return <GitAiNotFoundEmpty onGoInstall={() => navigate("install")} />;
@@ -363,15 +385,36 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
         </div>
       </div>
 
-      {/* 总览条 */}
-      <div className="grid grid-cols-5 gap-3 rounded-lg border border-border bg-card p-3">
-        {chips.map((c) => (
-          <div key={c.id} className="flex items-center gap-2 rounded-md px-2 py-1">
-            <StatusDot level={(c.item?.level ?? "muted") as StatusLevel} size="sm" />
-            <span className="truncate text-xs">{c.label}</span>
+      {/* 健康结论卡:一眼回答"配好了吗",吸收旧总览条的 4 色点摘要(不再单列一条,消除重复)。 */}
+      {data && (
+        <div
+          className={cn(
+            "flex items-center gap-4 rounded-lg border p-4",
+            healthy ? "border-border bg-success-muted/40" : "border-warning bg-warning-muted/40",
+          )}
+        >
+          {healthy ? (
+            <CheckCircle2 className="h-8 w-8 shrink-0 text-success" />
+          ) : (
+            <AlertTriangle className="h-8 w-8 shrink-0 text-warning-foreground dark:text-warning" />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-base font-semibold text-foreground">
+              {healthy
+                ? t("diagnostic.hero.allGood")
+                : t("diagnostic.hero.needAttentionTemplate", { n: attentionCount })}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1">
+              {chips.map((c) => (
+                <span key={c.id} className="flex items-center gap-1.5">
+                  <StatusDot level={(c.item?.level ?? "muted") as StatusLevel} size="sm" />
+                  <span className="text-xs text-muted-foreground">{c.label}</span>
+                </span>
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
       {/* 僵尸 daemon lock 横幅:lock 文件还在但 PID 已死,所有 hook 命令会被一直阻塞。
           独立横幅 + 复制清理命令,不卷进自动检查清单(后者是 git-ai 健康全景,不易凸显)。 */}
@@ -411,128 +454,210 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
         <QuickFixCatalogSection hits={catalogHits} onOpenEntry={setCatalogEntry} />
       )}
 
+      {/* 需要处理:检查清单里 err/warn 的项顶到结论卡下方,每条带跳转修复;健康时整块消失。 */}
+      {data && checklist.problems.length > 0 && (
+        <ul className="space-y-2">
+          {checklist.problems.map((it) => (
+            <li
+              key={it.id}
+              className={cn(
+                "flex items-center gap-3 rounded-lg border p-3",
+                it.level === "err"
+                  ? "border-danger bg-danger-muted/50"
+                  : "border-warning bg-warning-muted/50",
+              )}
+            >
+              <StatusDot level={it.level} size="sm" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-foreground">{it.label}</div>
+                {it.impact && (
+                  <div className="mt-0.5 text-xs text-muted-foreground">{it.impact}</div>
+                )}
+              </div>
+              {it.fix && (
+                <button
+                  onClick={() => navigate(it.fix!.to as never)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-2.5 py-1 text-xs hover:bg-muted dark:border-border dark:hover:bg-muted"
+                >
+                  {it.fix.label}
+                  <ArrowRight className="h-3 w-3" />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
       {q.isLoading && <SkeletonBlocks />}
 
       {data && (
         <>
-          {/* Agent 矩阵 */}
+          {/* AI Agent Hooks:圆形状态徽标网格(简洁、可视化);有问题在对应 agent 正下方就地修复。
+              6 个 agent 用 grid-cols-3 lg:grid-cols-6 自适应,窄屏 2 行、宽屏 1 行。 */}
           <section className="rounded-lg border border-border bg-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-medium">AI Agent Hooks(4 项)</h2>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-baseline gap-2 text-sm font-medium">
+                {t("diagnostic.agentHooks.title")}
+                <span className="text-xs font-normal text-muted-foreground">
+                  {t("diagnostic.agentHooks.configuredCountTemplate", {
+                    configured: configuredAgents,
+                    total: totalAgents,
+                  })}
+                </span>
+              </h2>
               <button
                 onClick={() => setFixOpen(true)}
                 disabled={toFix.length === 0}
                 title={
                   toFix.length === 0
-                    ? "当前没有需要修复的 agent"
-                    : `将为 ${toFix.length} 个 agent 写入官方 hooks`
+                    ? t("diagnostic.agentHooks.fixMissingDisabledTitle")
+                    : t("diagnostic.agentHooks.fixMissingTitleTemplate", { n: toFix.length })
                 }
                 className="inline-flex items-center gap-1 rounded-sm border border-primary px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground disabled:hover:bg-transparent dark:border-primary/40 dark:hover:bg-primary/15"
               >
                 <Wrench className="h-3 w-3" />
-                修复缺失({toFix.length})
+                {t("diagnostic.agentHooks.fixMissingTemplate", { n: toFix.length })}
               </button>
             </div>
-            <div className="grid grid-cols-4 gap-3">
-              {data.agents.map((a) => (
-                <Tooltip
-                  key={a.agent}
-                  content={
-                    <div className="space-y-1">
-                      <div className="font-medium">{AGENT_LABEL[a.agent]}</div>
-                      <div className="text-[11px] text-muted-foreground">
-                        {a.config_path ?? "(未知路径)"}
+            <div className="grid grid-cols-3 gap-4 lg:grid-cols-6">
+              {data.agents.map((a) => {
+                const statusLabel = !a.detected
+                  ? t("diagnostic.agentHooks.statusNotInstalled")
+                  : a.configured
+                    ? t("diagnostic.agentHooks.statusConfigured")
+                    : t("diagnostic.agentHooks.statusMissing");
+                const repairing = repairAgentM.isPending && repairAgentM.variables === a.agent;
+                return (
+                  <Tooltip
+                    key={a.agent}
+                    content={
+                      <div className="space-y-1">
+                        <div className="font-medium">{AGENT_LABEL[a.agent]}</div>
+                        <div className="text-[11px] text-muted-foreground">
+                          {a.config_path ?? t("diagnostic.agentHooks.unknownPath")}
+                        </div>
+                        {a.issues.length > 0 && (
+                          <ul className="list-disc pl-4 text-[11px] text-amber-300 dark:text-amber-700">
+                            {a.issues.map((i) => (
+                              <li key={i}>{i}</li>
+                            ))}
+                          </ul>
+                        )}
+                        {a.raw_excerpt && (
+                          <div className="font-mono text-[11px]">{a.raw_excerpt}</div>
+                        )}
                       </div>
-                      {a.issues.length > 0 && (
-                        <ul className="list-disc pl-4 text-[11px] text-amber-300 dark:text-amber-700">
-                          {a.issues.map((i) => (
-                            <li key={i}>{i}</li>
-                          ))}
-                        </ul>
-                      )}
-                      {a.raw_excerpt && (
-                        <div className="text-[11px] font-mono">{a.raw_excerpt}</div>
+                    }
+                  >
+                    <div className="flex cursor-default flex-col items-center gap-1.5 text-center">
+                      <StatusDot level={agentLevel(a)} size="lg" />
+                      <span className="text-xs font-medium text-foreground">
+                        {AGENT_LABEL[a.agent]}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">{statusLabel}</span>
+                      {a.detected && !a.configured && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            repairAgentM.mutate(a.agent);
+                          }}
+                          disabled={repairing}
+                          title={t("diagnostic.agentHooks.fixThisTitleTemplate", {
+                            agent: AGENT_LABEL[a.agent],
+                          })}
+                          className="mt-0.5 inline-flex cursor-pointer items-center gap-0.5 rounded-sm border border-primary px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary/40 dark:text-primary dark:hover:bg-primary/15"
+                        >
+                          {repairing ? (
+                            <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                          ) : (
+                            <Wrench className="h-2.5 w-2.5" />
+                          )}
+                          {t("diagnostic.agentHooks.fixThis")}
+                        </button>
                       )}
                     </div>
-                  }
-                >
-                  <div className="flex cursor-default flex-col items-center gap-1.5">
-                    <StatusDot level={agentLevel(a)} size="lg" />
-                    <span className="text-[11px] text-foreground/80">{AGENT_LABEL[a.agent]}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {!a.detected ? "未安装" : a.configured ? "已配置" : "缺失"}
-                    </span>
-                    {a.detected && !a.configured && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          repairAgentM.mutate(a.agent);
-                        }}
-                        disabled={repairAgentM.isPending && repairAgentM.variables === a.agent}
-                        title={`仅为 ${AGENT_LABEL[a.agent]} 触发 hook 修复`}
-                        className="mt-0.5 inline-flex cursor-pointer items-center gap-0.5 rounded-sm border border-primary px-1.5 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50 dark:border-primary/40 dark:text-primary dark:hover:bg-primary/15"
-                      >
-                        {repairAgentM.isPending && repairAgentM.variables === a.agent ? (
-                          <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                        ) : (
-                          <Wrench className="h-2.5 w-2.5" />
-                        )}
-                        修复此项
-                      </button>
-                    )}
-                  </div>
-                </Tooltip>
-              ))}
+                  </Tooltip>
+                );
+              })}
             </div>
           </section>
 
-          {/* 自动检查清单 */}
-          <section className="rounded-lg border border-border bg-card p-4">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-medium">
-              自动检查清单
-              <Badge tone="info">{items.length}</Badge>
-            </h2>
+          {/* 全部检查项抽屉:默认折叠的完整清单(问题已在上方"需要处理"突出);异常项置顶 + 状态 chip,detail/impact 收进 ⓘ。 */}
+          <Collapsible
+            title={t("diagnostic.checklist.title")}
+            summary={t("diagnostic.checklist.allPassTemplate", {
+              pass: checklist.passCount,
+              total: checklist.total,
+            })}
+          >
             <ul className="divide-y divide-border">
-              {items.map((it) => (
-                <li key={it.id} className="flex items-start gap-3 py-2.5">
-                  <StatusDot level={it.level} size="sm" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{it.label}</span>
-                      {it.impact && (
-                        <Tooltip
-                          content={<div className="text-[12px] leading-relaxed">{it.impact}</div>}
-                        >
-                          <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground" />
-                        </Tooltip>
-                      )}
-                    </div>
-                    {it.detail && (
-                      <div
-                        className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground"
-                        title={it.detail}
+              {checklist.sorted.map((it) => {
+                const chipLabel =
+                  it.level === "ok"
+                    ? t("diagnostic.checklist.statusPass")
+                    : it.level === "warn"
+                      ? t("diagnostic.checklist.statusWarn")
+                      : it.level === "err"
+                        ? t("diagnostic.checklist.statusFail")
+                        : t("diagnostic.checklist.statusNa");
+                const chipCls =
+                  it.level === "ok"
+                    ? "bg-success-muted text-success"
+                    : it.level === "warn"
+                      ? "bg-warning-muted text-warning-foreground dark:text-warning"
+                      : it.level === "err"
+                        ? "bg-danger-muted text-danger"
+                        : "bg-muted text-muted-foreground";
+                return (
+                  <li key={it.id} className="flex items-center gap-3 py-2">
+                    <StatusDot level={it.level} size="sm" />
+                    <span className="min-w-0 flex-1 truncate text-sm">{it.label}</span>
+                    {(it.impact || it.detail) && (
+                      <Tooltip
+                        content={
+                          <div className="space-y-1">
+                            {it.impact && (
+                              <div className="text-[12px] leading-relaxed">{it.impact}</div>
+                            )}
+                            {it.detail && (
+                              <div className="break-all font-mono text-[11px] text-muted-foreground">
+                                {it.detail}
+                              </div>
+                            )}
+                          </div>
+                        }
                       >
-                        {it.detail}
-                      </div>
+                        <Info className="h-3.5 w-3.5 shrink-0 cursor-help text-muted-foreground" />
+                      </Tooltip>
                     )}
-                  </div>
-                  {it.fix && (
-                    <button
-                      onClick={() => navigate(it.fix!.to as never)}
-                      className="inline-flex items-center gap-1 rounded-sm border border-border px-2 py-0.5 text-xs hover:bg-muted dark:border-border dark:hover:bg-muted"
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-medium",
+                        chipCls,
+                      )}
                     >
-                      {it.fix.label}
-                      <ArrowRight className="h-3 w-3" />
-                    </button>
-                  )}
-                </li>
-              ))}
+                      {chipLabel}
+                    </span>
+                    {it.fix && (
+                      <button
+                        onClick={() => navigate(it.fix!.to as never)}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-sm border border-border px-2 py-0.5 text-xs hover:bg-muted dark:border-border dark:hover:bg-muted"
+                      >
+                        {it.fix.label}
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
-          </section>
+          </Collapsible>
 
-          {/* 6 段详细报告 */}
-          <section>
-            <h2 className="mb-2 mt-1 text-sm font-medium">详细报告</h2>
+          {/* 详细报告抽屉:git-ai debug report 原始 6 段,默认折叠(排障才看)。 */}
+          <Collapsible
+            title={t("diagnostic.report.title")}
+            summary={t("diagnostic.report.summaryTemplate", { n: data.report.sections.length })}
+          >
             <div className="space-y-2">
               {data.report.sections.length === 0 && (
                 <div className="rounded-sm border border-dashed border-border px-4 py-6 text-center text-xs text-muted-foreground">
@@ -569,17 +694,11 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
                 </Collapsible>
               ))}
             </div>
-          </section>
+          </Collapsible>
 
-          {/* 底部隐私 + 操作提示(每次安装/改 hooks 后这两句必出现) */}
-          <p className="pt-2 text-center text-[11px] text-muted-foreground">
+          {/* 隐私基线一行常驻;"重启 agent / 重开终端"已在修复动作后 toast 提示,不长期占屏。 */}
+          <p className="py-2 text-center text-[11px] text-muted-foreground">
             {t("common.noUploadNotice")}
-          </p>
-          <p className="text-center text-[11px] text-amber-600 dark:text-amber-400">
-            {t("common.mustRestartAgent")}
-          </p>
-          <p className="pb-4 text-center text-[11px] text-amber-600 dark:text-amber-400">
-            {t("common.mustReopenTerminal")}
           </p>
         </>
       )}

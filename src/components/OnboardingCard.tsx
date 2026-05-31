@@ -58,9 +58,16 @@ export function OnboardingCard({
 
   const steps: Array<{ key: keyof SetupChecklist; labelKey: string }> = [
     { key: "gitAiInstalled", labelKey: "onboarding.checklist.gitAi" },
-    { key: "repoSelected", labelKey: "onboarding.checklist.repo" },
+    { key: "repoAdded", labelKey: "onboarding.checklist.repo" },
     { key: "hasConfiguredHook", labelKey: "onboarding.checklist.hook" },
   ];
+
+  // CTA 跳到第一个未就绪步骤对应的页:装 git-ai → 诊断;加仓入聚合 → 仓库;配 hook → Hooks。
+  const ctaTarget: RouteId = !setup.checklist.gitAiInstalled
+    ? "diagnostic"
+    : !setup.checklist.repoAdded
+      ? "repo"
+      : "hooks";
 
   return (
     <section className="rounded-lg border border-border bg-card p-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -89,7 +96,7 @@ export function OnboardingCard({
           return (
             <li key={s.key} className="flex items-center gap-2 text-xs">
               {done ? (
-                <Check className="h-3.5 w-3.5 text-emerald-500" />
+                <Check className="h-3.5 w-3.5 text-success" />
               ) : (
                 <Circle className="h-3.5 w-3.5 text-muted-foreground/50" />
               )}
@@ -104,7 +111,7 @@ export function OnboardingCard({
       <div className="mt-4 flex items-center gap-2">
         <button
           type="button"
-          onClick={() => onNavigate("diagnostic")}
+          onClick={() => onNavigate(ctaTarget)}
           className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           {t("onboarding.cta")}

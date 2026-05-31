@@ -14,20 +14,20 @@ export function EmptyState({
   description,
   ctaLabel,
   onCta,
-  tone = "amber",
+  tone = "warn",
 }: {
   Icon: LucideIcon;
   title: string;
   description: ReactNode;
   ctaLabel?: string;
   onCta?: () => void;
-  /** amber = 警告(语义色保留);neutral = 中性(走 muted)。 */
-  tone?: "amber" | "neutral";
+  /** warn = 警告(走 warning 语义 token);neutral = 中性(走 muted)。 */
+  tone?: "warn" | "neutral";
 }) {
   const { t } = useTranslation();
   const ring =
-    tone === "amber"
-      ? "bg-amber-100 text-amber-600 dark:bg-amber-950/40"
+    tone === "warn"
+      ? "bg-warning-muted text-warning-foreground dark:text-warning"
       : "bg-muted text-muted-foreground";
   return (
     <div className="flex h-full items-center justify-center p-10">

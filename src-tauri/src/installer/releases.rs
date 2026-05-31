@@ -17,7 +17,10 @@ use crate::paths::studio_data_dir;
 const RELEASES_URL: &str =
     "https://api.github.com/repos/git-ai-project/git-ai/releases?per_page=30";
 const USER_AGENT: &str = "git-ai-studio/0.1";
-const CACHE_TTL: Duration = Duration::from_secs(30 * 60);
+/// 版本列表缓存 6 小时:GitHub **匿名** REST API 限流 = 60 次/小时·按来源 IP。多人共用同一出口
+/// IP(公司 NAT / VPN / 代理)时极易耗尽配额(403)。拉长 TTL → 一次成功后 6h 不再打 GitHub,
+/// 大幅降低撞限流概率。命中 304 不计入限流;用户仍可点「重试」强制刷新(force=true 绕过缓存)。
+const CACHE_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReleaseAsset {

@@ -15,20 +15,10 @@ import type {
   DebugReport,
   DiagnosticOverview,
   HooksStatus,
-  ShimStatus,
   WhoamiPayload,
 } from "../lib/types";
 
 // ===== 构造器:把"诊断快照"的构造从测试用例剥出来 =====
-
-function makeShim(firstIsShim: boolean): ShimStatus {
-  return {
-    resolved_paths: ["C:/Users/me/.git-ai/bin/git.exe"],
-    first_is_shim: firstIsShim,
-    expected_shim: "C:/Users/me/.git-ai/bin/git.exe",
-    ok: firstIsShim,
-  };
-}
 
 function makeReport(loginStatus: string | null): DebugReport {
   const sections = loginStatus
@@ -78,7 +68,6 @@ function makeDiagnostic(overrides: Partial<DiagnosticOverview>): DiagnosticOverv
       working_logs_count: 1,
     },
     report: makeReport("logged in as alice@example.com"),
-    shim: makeShim(true),
     agents: [makeAgent({ agent: "Claude" })],
     degraded: null,
     ...overrides,
@@ -117,8 +106,8 @@ const HEALTHY_CTX: QuickFixContext = {
 // ===== 结构性断言 =====
 
 describe("QUICK_FIX_CATALOG structure", () => {
-  it("≥ 5 条预置条目(任务要求)", () => {
-    expect(QUICK_FIX_CATALOG.length).toBeGreaterThanOrEqual(5);
+  it("≥ 4 条预置条目(git shim 诊断已随上游淘汰移除)", () => {
+    expect(QUICK_FIX_CATALOG.length).toBeGreaterThanOrEqual(4);
   });
 
   it("每条 id 唯一且非空", () => {
@@ -169,9 +158,11 @@ describe("evaluateQuickFixes — sorting & empty cases", () => {
   });
 
   it("err 排在 warn / info 之前", () => {
-    // 同时触发:git-shim 失效(err) + refs-notes-ai-stale(info)
+    // 同时触发:hooks 缺失(err) + refs-notes-ai-stale(info)
     const ctx: QuickFixContext = {
-      diagnostic: makeDiagnostic({ shim: makeShim(false) }),
+      diagnostic: makeDiagnostic({
+        agents: [makeAgent({ detected: true, configured: false })],
+      }),
       hooks: makeHooks("official"),
       whoami: makeWhoami("logged_in"),
       isWindows: true,
@@ -217,7 +208,6 @@ describe("git-ai-not-installed", () => {
     const hits = evaluateQuickFixes(ctx);
     expect(hits.some((h) => h.id === "refs-notes-ai-stale")).toBe(false);
     expect(hits.some((h) => h.id === "hooks-missing-for-installed-agents")).toBe(false);
-    expect(hits.some((h) => h.id === "git-shim-not-effective")).toBe(false);
   });
 });
 
@@ -309,23 +299,5 @@ describe("hooks-missing-for-installed-agents", () => {
     expect(
       evaluateQuickFixes(HEALTHY_CTX).some((h) => h.id === "hooks-missing-for-installed-agents"),
     ).toBe(false);
-  });
-});
-
-describe("git-shim-not-effective", () => {
-  it("命中:有候选但 first_is_shim=false", () => {
-    const ctx: QuickFixContext = {
-      diagnostic: makeDiagnostic({ shim: makeShim(false) }),
-      hooks: makeHooks("official"),
-      whoami: makeWhoami("logged_in"),
-      isWindows: true,
-    };
-    expect(evaluateQuickFixes(ctx).some((h) => h.id === "git-shim-not-effective")).toBe(true);
-  });
-
-  it("不命中:first_is_shim=true(正常)", () => {
-    expect(evaluateQuickFixes(HEALTHY_CTX).some((h) => h.id === "git-shim-not-effective")).toBe(
-      false,
-    );
   });
 });

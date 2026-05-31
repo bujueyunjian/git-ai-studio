@@ -16,7 +16,7 @@
 //!   (`HumanRecord` / `PromptRecord` / `SessionRecord`)
 //!
 //! # Schema 关键事实
-//! - `prompts` 普通 16-hex 无前缀 → 完整 PromptRecord(含 messages)
+//! - `prompts` 普通 16-hex 无前缀 → 完整 PromptRecord(含 messages_url + 行级统计)
 //! - `humans` 以 `h_<14hex>` 为 key,只有 `author: String`
 //! - `sessions` 以 `s_<14hex>` 为 key,attestation hash 可能为 `s_xxx::t_yyy` 复合
 //!   (split("::").next() 取 session_key,见上游 `:278`)
@@ -64,14 +64,9 @@ pub struct AgentId {
     pub model: String,
 }
 
-/// `messages` 数组单条。`type` 取 `"user" / "assistant" / "tool_use"`。
-/// `text` 在 user/assistant 时承载,`name + input` 在 tool_use 时承载。
-/// `timestamp` 可选(ISO-8601)。
-/// 上游不在 Rust 端反序列化 `messages` 数组,直接以 `serde_json::Value` 透传,
-/// 我们 viewer 同样透传以承担"未来扩展 type"的零成本兼容。
-pub type MessageValue = serde_json::Value;
-
 /// `prompts.<hash>` 完整记录。字段顺序与上游 `authorship_log.rs:198-213` 一致。
+/// (上游 PromptRecord 只有 `messages_url`,不含 `messages` 数组 —— 后者自 v1.3.4 起从 spec 移除,
+/// 见 spec E-002;历史 note 里残留的 `messages` 键由 serde 忽略,不解析、不展示。)
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PromptRecord {
@@ -79,7 +74,6 @@ pub struct PromptRecord {
     pub human_author: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub messages_url: Option<String>,
-    pub messages: Vec<MessageValue>,
     pub total_additions: u32,
     pub total_deletions: u32,
     pub accepted_lines: u32,
@@ -98,7 +92,7 @@ pub struct HumanRecord {
     pub author: String,
 }
 
-/// `sessions.<s_...>` 轻量 session 记录。无 messages / stats,仅标"该 session 写过"。
+/// `sessions.<s_...>` 轻量 session 记录。无行级 stats,仅标"该 session 写过"。
 /// 上游 `authorship_log.rs:217-222`。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -110,7 +104,7 @@ pub struct SessionRecord {
 }
 
 /// authorship/3.0.0 metadata 段。
-/// 与上游 `AuthorshipMetadata`(`authorship_log_serialization.rs:28-37`)5 字段一致。
+/// 与上游 `AuthorshipMetadata`(`authorship_log_serialization.rs:28-37`)6 字段一致。
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AuthorshipMetadata {
     pub schema_version: String,

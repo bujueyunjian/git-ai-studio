@@ -5,7 +5,7 @@
 //   paths      跨平台路径 helper(~/.git-ai、~/.claude 等)
 //   state      AppState(当前仓库、诊断缓存、应用偏好)
 //   proc       跨平台子进程封装(超时 + Windows CREATE_NO_WINDOW)
-//   git_ai     git-ai CLI 包装(binary 路径 / debug report 解析 / git shim 校验)
+//   git_ai     git-ai CLI 包装(binary 路径 / debug report 解析 / notes 读取)
 //   agents     7 个 AI Agent 的 hook 探测(Claude/Cursor 完整,其余 5 占位)
 //   repo       仓库扫描与 HEAD 读取
 //   commands   #[tauri::command] 暴露层
@@ -154,6 +154,8 @@ pub fn run() {
             commands::repo::list_recent_repos,
             commands::repo::list_scan_roots,
             commands::repo::set_scan_roots,
+            commands::repo::get_aggregate_repos,
+            commands::repo::set_aggregate_repos,
             commands::repo::restore_last_repo,
             commands::repo::open_in_explorer,
             commands::install::list_releases,
@@ -182,6 +184,9 @@ pub fn run() {
             commands::stats::get_commit_status,
             commands::stats::list_recent_commits,
             commands::history::get_history,
+            commands::history::list_recent_commits_with_stats,
+            commands::history::get_aggregate_history,
+            commands::history::get_aggregate_working_status,
             commands::history::get_range_summary,
             commands::history::clear_stats_cache,
             commands::people::get_people_breakdown,

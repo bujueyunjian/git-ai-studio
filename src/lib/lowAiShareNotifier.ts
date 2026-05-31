@@ -12,7 +12,7 @@
  *
  * # 与口径
  * `total_additions = human + unknown + ai`(与 git-ai 上游 stats.rs:114 一致,3 桶并列)。
- * 数据来源 = 仓库整体用 Dashboard 的 `getHistory.daily_buckets`;按人统计用 People 的 author 聚合。
+ * 数据来源 = 仓库整体用 Dashboard 的 `getHistory.daily_buckets`;作者归因用 People 的 author 聚合。
  */
 
 import type { HistoryPayload, PeopleBreakdownPayload } from "./types";
@@ -48,8 +48,14 @@ export const LOW_AI_SHARE_RESET_EVENT = "git-ai-studio:low-ai-share-reset";
 export interface LowAiShareSummary {
   aiAdditions: number;
   totalAdditions: number;
-  /** 当前 AI 占比 [0, 100],integer-rounded;无数据为 null。 */
+  /** 展示用 AI 占比 [0, 100],integer-rounded(喂 webhook / toast / 宠物气泡);无数据为 null。 */
   sharePercent: number | null;
+  /**
+   * **阈值判定**专用的精确占比 [0, 1](= ai / total),不做四舍五入;无数据为 null。
+   * 与 `sharePercent` 分开:整数舍入会在阈值边界产生约 0.5pp 死区(如真实 79.6% 被 round 成 80,
+   * 与 Dashboard 1 位小数口径不一致而漏报);判定一律用此精确值,展示才用 `sharePercent`。
+   */
+  shareRatio: number | null;
 }
 
 /** 从 HistoryPayload 的 daily_buckets 聚合出 7 天总览。 */
@@ -67,6 +73,7 @@ export function summarizeAiShare(payload: HistoryPayload): LowAiShareSummary {
     aiAdditions: ai,
     totalAdditions: total,
     sharePercent: total > 0 ? Math.round((ai / total) * 100) : null,
+    shareRatio: total > 0 ? ai / total : null,
   };
 }
 
@@ -87,6 +94,7 @@ export function summarizeAiShareForEmails(
     aiAdditions: ai,
     totalAdditions: total,
     sharePercent: total > 0 ? Math.round((ai / total) * 100) : null,
+    shareRatio: total > 0 ? ai / total : null,
   };
 }
 
@@ -143,8 +151,9 @@ export function decideLowAiShareNotification(input: ShouldNotifyInput): NotifyDe
   if (input.summary.totalAdditions < LOW_AI_SHARE_MIN_TOTAL_ADDITIONS) {
     return { trigger: false, reason: "insufficient_sample" };
   }
-  const share = input.summary.sharePercent;
-  if (share === null || share >= input.thresholdPercent) {
+  // 用精确 shareRatio 判定(非 round 后的 sharePercent),避免边界 ~0.5pp 死区造成漏报。
+  const ratio = input.summary.shareRatio;
+  if (ratio === null || ratio * 100 >= input.thresholdPercent) {
     return { trigger: false, reason: "share_above_threshold" };
   }
   if (

@@ -154,6 +154,11 @@ export function InkPetController({ settings }: Props) {
         case "open-main":
           void focusMainWindow();
           break;
+        case "open-diagnostic":
+          // urgent 态(hook 缺失 / daemon 异常)双击直达诊断页:改主窗 hash 触发 hash router,再聚焦。
+          window.location.hash = "#/diagnostic";
+          void focusMainWindow();
+          break;
         case "hide":
           setAppSettings({ pet_enabled: false })
             .then(() => qc.invalidateQueries({ queryKey: ["app_settings"] }))
@@ -207,11 +212,13 @@ export function InkPetController({ settings }: Props) {
     const summary = hist && hist.status === "ok" ? summarizeAiShare(hist.payload) : null;
     const aiSharePercent = summary?.sharePercent ?? null;
     const attributionFailed = hist?.status === "ok" ? hist.payload.failed_shas.length > 0 : false;
+    // 阈值判定用精确 shareRatio(与 decideLowAiShareNotification 一致),避免 round 后整数在
+    // 边界造成宠物状态与提醒不同步(~0.5pp 死区);展示(aiSharePercent / 气泡)仍用 round 值。
     const lowAiShare =
       summary !== null &&
       summary.totalAdditions >= LOW_AI_SHARE_MIN_TOTAL_ADDITIONS &&
-      summary.sharePercent !== null &&
-      summary.sharePercent < threshold;
+      summary.shareRatio !== null &&
+      summary.shareRatio * 100 < threshold;
     const idle = Date.now() - lastActivityRef.current > IDLE_MS;
 
     const kind = decidePetState({

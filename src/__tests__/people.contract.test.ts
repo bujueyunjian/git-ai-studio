@@ -13,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { buildCsv, filterRows, sortRows } from "../pages/peopleTable";
+import { sortRows, sumRowsToTotals } from "../pages/peopleTable";
 import type { PersonRow } from "../lib/types";
 
 function row(partial: Partial<PersonRow> & { identity_key: string }): PersonRow {
@@ -53,17 +53,6 @@ describe("people / identity 聚合", () => {
     const alice = rows.find((r) => r.identity_key === "alice@example.com")!;
     expect(alice.author_email).toBe("Alice@Example.com");
     expect(alice.identity_key).toBe(alice.author_email.toLowerCase());
-  });
-
-  it("filterRows 大小写不敏感同时匹配 name / email", () => {
-    const rows = [
-      row({ identity_key: "alice@example.com", author_name: "Alice" }),
-      row({ identity_key: "bob@example.com", author_name: "Bob" }),
-    ];
-    expect(filterRows(rows, "ALI").length).toBe(1);
-    expect(filterRows(rows, "alice@").length).toBe(1);
-    expect(filterRows(rows, "").length).toBe(2);
-    expect(filterRows(rows, "xxx").length).toBe(0);
   });
 });
 
@@ -167,50 +156,42 @@ describe("people / 排序稳定性", () => {
   });
 });
 
-describe("people / CSV 导出", () => {
-  it("含 UTF-8 BOM + CRLF 换行,Excel 中文不乱码", () => {
+describe("people / 「只看我」总计重算", () => {
+  it("sumRowsToTotals 按行逐桶累加(总览卡随展示范围自洽)", () => {
     const rows = [
       row({
-        identity_key: "alice@example.com",
-        author_name: "Alice",
-        author_email: "alice@example.com",
-        commits: 3,
+        identity_key: "me@x",
+        commits: 2,
         human_additions: 10,
-        unknown_additions: 5,
-        ai_additions: 30,
-        total_additions: 45,
+        unknown_additions: 1,
+        ai_additions: 5,
+        total_additions: 16,
       }),
-    ];
-    const csv = buildCsv(rows);
-    // BOM
-    expect(csv.charCodeAt(0)).toBe(0xfeff);
-    // CRLF 行尾(RFC 4180)
-    expect(csv.includes("\r\n")).toBe(true);
-    // 占比格式化为百分号字符串
-    expect(csv).toMatch(/66\.7%/);
-  });
-
-  it("CSV 字段含逗号 / 引号时按 RFC 4180 转义(双引号包裹 + 内部双引号翻倍)", () => {
-    const rows = [
       row({
-        identity_key: "weird@example.com",
-        author_name: 'Smith, "Bob"',
-        author_email: "weird@example.com",
+        identity_key: "you@x",
+        commits: 3,
+        human_additions: 20,
+        unknown_additions: 2,
+        ai_additions: 8,
+        total_additions: 30,
       }),
     ];
-    const csv = buildCsv(rows);
-    expect(csv).toMatch(/"Smith, ""Bob"""/);
+    expect(sumRowsToTotals(rows)).toEqual({
+      commits: 5,
+      human_additions: 30,
+      unknown_additions: 3,
+      ai_additions: 13,
+      total_additions: 46,
+    });
   });
 
-  it("AI 占比为 null 时 CSV 单元格为空串", () => {
-    const rows = [row({ identity_key: "z@x", commits: 1, total_additions: 0 })];
-    const csv = buildCsv(rows);
-    // buildCsv 用 join("\r\n") 拼接,数据行就是最后一行,不再追加尾 CRLF。
-    // 末列为空 → 行末是 "," 后紧跟字符串末尾。
-    expect(csv.endsWith(",")).toBe(true);
-    // 确认行内有 7 个逗号(共 8 列),末列在最后一个逗号之后为空。
-    const lastLine = csv.split("\r\n").pop() ?? "";
-    expect(lastLine.split(",").length).toBe(8);
-    expect(lastLine.split(",").pop()).toBe("");
+  it("空行集合 → 全零总计(「只看我」无 commit 时总览卡显 0,不残留全作者口径)", () => {
+    expect(sumRowsToTotals([])).toEqual({
+      commits: 0,
+      human_additions: 0,
+      unknown_additions: 0,
+      ai_additions: 0,
+      total_additions: 0,
+    });
   });
 });

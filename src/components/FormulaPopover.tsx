@@ -33,7 +33,7 @@ export function FormulaPopover({ metricId }: { metricId: MetricId }) {
           aria-haspopup="dialog"
           // 指标卡可能整体可点(如 hook 覆盖率跳 Hooks 页),阻止点 ? 时冒泡触发卡片跳转
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-slate-400 hover:text-slate-600 focus:outline-hidden focus:ring-2 focus:ring-ring dark:hover:text-slate-200"
+          className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
         >
           <Info className="h-3.5 w-3.5" />
         </button>
@@ -43,9 +43,7 @@ export function FormulaPopover({ metricId }: { metricId: MetricId }) {
           <div className="text-sm font-semibold">{meta.title}</div>
 
           <Section label={t("formula.definition")}>
-            <div className="text-[12px] leading-relaxed text-slate-700 dark:text-slate-200">
-              {meta.definition}
-            </div>
+            <div className="text-[12px] leading-relaxed text-foreground">{meta.definition}</div>
           </Section>
 
           <Section label={t("formula.formula")}>
@@ -54,7 +52,9 @@ export function FormulaPopover({ metricId }: { metricId: MetricId }) {
 
           {meta.example && (
             <Section label={t("formula.example")}>
-              <div className="text-[11px] leading-relaxed text-slate-500">{meta.example}</div>
+              <div className="text-[11px] leading-relaxed text-muted-foreground">
+                {meta.example}
+              </div>
             </Section>
           )}
         </div>
@@ -66,7 +66,7 @@ export function FormulaPopover({ metricId }: { metricId: MetricId }) {
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
       <div className="mt-0.5">{children}</div>
@@ -84,7 +84,7 @@ function FormulaTokens({
   onPick: (id: MetricId) => void;
 }) {
   return (
-    <div className="text-[12px] leading-snug text-slate-700 dark:text-slate-200">
+    <div className="text-[12px] leading-snug text-foreground">
       {tokens.map((tok, i) =>
         tok.kind === "text" ? (
           <span key={i}>{tok.text}</span>
@@ -96,8 +96,8 @@ function FormulaTokens({
             aria-label={`查看 ${METRICS[tok.id].title} 的公式`}
             className={`mx-0.5 inline-flex items-center rounded px-1 font-mono text-[11px] transition-colors ${
               tok.id === activeId
-                ? "bg-primary/10 text-primary dark:bg-primary/10 dark:text-primary"
-                : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground hover:bg-foreground/10"
             }`}
             title={`查看 ${METRICS[tok.id].title} 的公式`}
           >

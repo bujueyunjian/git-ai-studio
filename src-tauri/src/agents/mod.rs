@@ -6,6 +6,8 @@
 //! | Cursor   | `~/.cursor/hooks.json`                                   | JSON hooks 数组      |
 //! | Codex    | `~/.codex/config.toml`(legacy: `~/.codex/hooks.json`)    | TOML `[[hooks.*]]`,fallback JSON |
 //! | OpenCode | `~/.config/opencode/plugins/git-ai.ts`                   | TS plugin 占位符替换 |
+//! | Gemini   | `~/.gemini/settings.json`                                | JSON hooks 段(BeforeTool/AfterTool) |
+//! | Pi       | `~/.pi/agent/extensions/git-ai.ts`                       | TS extension 占位符替换 |
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -15,7 +17,9 @@ use std::sync::Arc;
 pub mod claude;
 pub mod codex;
 pub mod cursor;
+pub mod gemini;
 pub mod opencode;
+pub mod pi;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AgentKind {
@@ -23,6 +27,8 @@ pub enum AgentKind {
     Cursor,
     Codex,
     OpenCode,
+    Gemini,
+    Pi,
 }
 
 impl AgentKind {
@@ -32,6 +38,8 @@ impl AgentKind {
             AgentKind::Cursor => "Cursor",
             AgentKind::Codex => "Codex",
             AgentKind::OpenCode => "OpenCode",
+            AgentKind::Gemini => "Gemini",
+            AgentKind::Pi => "Pi",
         }
     }
 }
@@ -72,6 +80,8 @@ pub fn all_probes() -> Vec<Arc<dyn AgentProbe>> {
         Arc::new(cursor::CursorProbe),
         Arc::new(codex::CodexProbe),
         Arc::new(opencode::OpenCodeProbe),
+        Arc::new(gemini::GeminiProbe),
+        Arc::new(pi::PiProbe),
     ]
 }
 
@@ -133,5 +143,35 @@ pub(crate) fn probe_ts_plugin(
         },
         raw_excerpt: excerpt,
         issues,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 注册回归:all_probes 必须覆盖全部 6 个 AgentKind,且每个都给出非空 config_path。
+    /// 防止以后新增 AgentKind 却忘记在 all_probes 里注册(Diagnostic 页会少一个 agent)。
+    #[test]
+    fn all_probes_covers_all_six_agent_kinds() {
+        let probes = all_probes();
+        assert_eq!(probes.len(), 6, "应注册 6 个 agent 探测");
+        for kind in [
+            AgentKind::Claude,
+            AgentKind::Cursor,
+            AgentKind::Codex,
+            AgentKind::OpenCode,
+            AgentKind::Gemini,
+            AgentKind::Pi,
+        ] {
+            let p = probes
+                .iter()
+                .find(|p| p.kind() == kind)
+                .unwrap_or_else(|| panic!("缺少 {kind:?} 探测注册"));
+            assert!(
+                !p.config_path().as_os_str().is_empty(),
+                "{kind:?} config_path 不应为空"
+            );
+        }
     }
 }

@@ -54,6 +54,11 @@ pub fn claude_settings_json() -> PathBuf {
     claude_dir().join("settings.json")
 }
 
+/// `~/.gemini/settings.json`(上游 `GeminiInstaller::settings_path` 真源 git-ai/src/mdm/agents/gemini.rs:18-20)
+pub fn gemini_settings_json() -> PathBuf {
+    home_dir().join(".gemini").join("settings.json")
+}
+
 /// `~/.cursor/hooks.json`
 pub fn cursor_hooks_json() -> PathBuf {
     home_dir().join(".cursor").join("hooks.json")

@@ -9,6 +9,24 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
+ * 墨宠窗口透明化(与主窗共用 index.html / App.css)。main.tsx 在 React 挂载前给 <html>
+ * 打 .pet-window,这里据此把整份文档压成透明无滚动:
+ * - background: transparent —— 盖掉主窗 body 的不透明底色 var(--background)
+ * - color-scheme: normal —— .dark 下 color-scheme:dark 会让 WebKit 在透明窗后铺不透明深色
+ * - overflow: hidden —— 绝对定位的 hover 气泡 / 右键菜单超出小窗口时不出滚动条
+ * 规则置于所有 @layer 之外(无层级声明优先级高于任何 @layer),无需 !important 即可压过 base 层。
+ */
+html.pet-window,
+html.pet-window body,
+html.pet-window #root {
+  background: transparent;
+  overflow: hidden;
+}
+html.pet-window {
+  color-scheme: normal;
+}
+
+/*
  * 字体 token。色板 token 在下方 @theme inline 里单源映射到 oklch 的 CSS 变量。
  */
 @theme {

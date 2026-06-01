@@ -38,6 +38,9 @@ function currentWindowLabel(): string {
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 
 if (currentWindowLabel() === "pet") {
+  // 在 React 挂载前给 <html> 打标记:App.css 据此把整份 pet 文档压成透明无滚动
+  // (与主窗共用 index.html / CSS 时,压平 body 底色 / color-scheme / overflow)。
+  document.documentElement.classList.add("pet-window");
   root.render(
     <React.StrictMode>
       <InkPetWindow />

@@ -74,18 +74,6 @@ export function InkPetWindow() {
   // 上次 mousedown 时间戳:手动判定双击(startDragging 会吞掉浏览器合成的 dblclick)。
   const lastDownRef = useRef(0);
 
-  // pet 窗口背景必须透明(它加载与主窗同一 index.html / App.css,默认 body 有底色)。
-  useEffect(() => {
-    const prevBody = document.body.style.background;
-    const prevHtml = document.documentElement.style.background;
-    document.body.style.background = "transparent";
-    document.documentElement.style.background = "transparent";
-    return () => {
-      document.body.style.background = prevBody;
-      document.documentElement.style.background = prevHtml;
-    };
-  }, []);
-
   // 监听主窗推来的状态。pet 是独立 webview / 独立 i18n 实例,语言以主窗 payload 为准:
   // 与本窗当前语言不一致就 changeLanguage(下方 languageChanged 订阅会触发重渲染),
   // 否则右键菜单 / 气泡会停在 pet 窗启动时自行检测到的语言,和主窗切换后对不上。

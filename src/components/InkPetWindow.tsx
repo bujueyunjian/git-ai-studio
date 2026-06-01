@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
-import i18n from "../i18n";
+import i18n, { getCurrentLanguage } from "../i18n";
 
 import { drawPet } from "../lib/petRenderer";
 import {
@@ -21,6 +21,7 @@ const INITIAL_STATE: PetStatePayload = {
   opacity: 1,
   alertIntervalSec: 30,
   sizePx: 180,
+  lang: getCurrentLanguage(),
 };
 
 /** 静态态(无脉冲 / 抖动 / 提醒)降到 ≈8fps 省 CPU。 */
@@ -85,15 +86,28 @@ export function InkPetWindow() {
     };
   }, []);
 
-  // 监听主窗推来的状态。
+  // 监听主窗推来的状态。pet 是独立 webview / 独立 i18n 实例,语言以主窗 payload 为准:
+  // 与本窗当前语言不一致就 changeLanguage(下方 languageChanged 订阅会触发重渲染),
+  // 否则右键菜单 / 气泡会停在 pet 窗启动时自行检测到的语言,和主窗切换后对不上。
   useEffect(() => {
     const unlistenP = listen<PetStatePayload>(PET_STATE_EVENT, (e) => {
       stateRef.current = e.payload;
       setBubbleState(e.payload);
+      if (e.payload.lang !== getCurrentLanguage()) {
+        void i18n.changeLanguage(e.payload.lang);
+      }
     });
     return () => {
       unlistenP.then((un) => un()).catch(() => {});
     };
+  }, []);
+
+  // i18n.t() 非响应式:语言切换后需主动触发重渲染,菜单 / 气泡才会换文案(镜像 App.tsx)。
+  const [, setLangTick] = useState(0);
+  useEffect(() => {
+    const handler = () => setLangTick((n) => n + 1);
+    i18n.on("languageChanged", handler);
+    return () => i18n.off("languageChanged", handler);
   }, []);
 
   // 挂载完成后通知主窗补发一次当前状态(否则要等主窗下一次心跳才同步)。

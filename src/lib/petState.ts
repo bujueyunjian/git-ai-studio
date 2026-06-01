@@ -23,6 +23,7 @@ import inkbeastIdle from "../assets/pet/inkbeast/idle.png";
 import inkbeastHappy from "../assets/pet/inkbeast/happy.png";
 import inkbeastSleep from "../assets/pet/inkbeast/sleep.png";
 import inkbeastAlert from "../assets/pet/inkbeast/alert.png";
+import type { SupportedLanguage } from "../i18n";
 
 /** pet 窗口与主窗口之间的状态推送事件名(主窗 emit / pet listen)。 */
 export const PET_STATE_EVENT = "git-ai-studio://pet-state";
@@ -64,6 +65,9 @@ export interface PetStatePayload {
   alertIntervalSec: number;
   /** 窗口 / 画布边长(px),由尺寸档位映射而来。 */
   sizePx: number;
+  /** 主窗当前生效语言。pet 是独立 webview(独立 i18n 实例),靠这条同步语言 —— 否则
+   *  右键菜单 / 气泡会停在 pet 窗自己启动时检测到的语言,与主窗切换后不一致。 */
+  lang: SupportedLanguage;
 }
 
 /** `decidePetState` 的输入。各字段由 InkPetController 从现有 query 派生。 */

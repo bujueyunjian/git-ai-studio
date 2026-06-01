@@ -10,6 +10,7 @@ import {
   setAppSettings,
 } from "../lib/api";
 import { daemonIssueKey } from "../lib/daemonNotifier";
+import { getCurrentLanguage } from "../i18n";
 import { focusMainWindow } from "../lib/osNotify";
 import {
   LOW_AI_SHARE_CHECK_INTERVAL_MS,
@@ -200,6 +201,7 @@ export function InkPetController({ settings }: Props) {
         opacity,
         alertIntervalSec,
         sizePx,
+        lang: getCurrentLanguage(),
       } satisfies PetStatePayload);
       return;
     }
@@ -236,6 +238,7 @@ export function InkPetController({ settings }: Props) {
       opacity,
       alertIntervalSec,
       sizePx,
+      lang: getCurrentLanguage(),
     };
     void emit(PET_STATE_EVENT, payload);
     // tick 进依赖数组以驱动周期重算 / 重 emit;lastActivityRef 是 ref 不触发渲染,靠 tick 兜底。

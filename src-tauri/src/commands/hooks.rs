@@ -5,6 +5,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::agents::{all_probes, AgentHookStatus};
 use crate::error::AppError;
 use crate::git_ai;
 use crate::hooks::{
@@ -256,7 +257,21 @@ pub async fn install_hooks_for_agent(
         *g = None;
     }
 
-    result.map_err(|e| e.to_string())
+    let code = result.map_err(|e| e.to_string())?;
+    let status = probe_agent_after_install(agent).await?;
+    if !status.configured {
+        let detail = if status.issues.is_empty() {
+            "复测仍未检测到有效 git-ai hook".to_string()
+        } else {
+            status.issues.join("; ")
+        };
+        return Err(format!(
+            "{} 修复命令已执行,但复测仍未通过: {detail}",
+            agent.display_name()
+        ));
+    }
+
+    Ok(code)
 }
 
 async fn run_git_ai_install(app: AppHandle, topic: &str) -> crate::error::Result<i32> {
@@ -275,6 +290,17 @@ async fn run_git_ai_install(app: AppHandle, topic: &str) -> crate::error::Result
         return Err(AppError::Other(format!("git-ai install 退出码 {code}")));
     }
     Ok(code)
+}
+
+async fn probe_agent_after_install(
+    agent: crate::agents::AgentKind,
+) -> Result<AgentHookStatus, String> {
+    for probe in all_probes() {
+        if probe.kind() == agent {
+            return Ok(probe.probe().await);
+        }
+    }
+    Err(format!("unknown agent: {agent:?}"))
 }
 
 fn app_log(app: &AppHandle, topic: &str, stream: &str, line: &str) -> crate::error::Result<()> {

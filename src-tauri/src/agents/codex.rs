@@ -1,5 +1,5 @@
-//! Codex (OpenAI):`~/.codex/config.toml` 内嵌 `[[hooks.*]]` 段(git-ai 1.4.9+ 主路径)。
-//! Legacy:`~/.codex/hooks.json`(git-ai 1.4.8-,1.4.9 仍可识别但 install-hooks 会清理)。
+//! Codex (OpenAI):`~/.codex/config.toml` 内嵌 `[[hooks.*]]` 段(git-ai 1.4.8+ 主路径)。
+//! Legacy:`~/.codex/hooks.json`(git-ai 1.4.7-,1.4.8+ 仍可识别但 install-hooks 会清理)。
 //!
 //! # 权威 schema 来源
 //! 上游 `git-ai/src/mdm/agents/codex.rs:14, 164-208, 233-318`:
@@ -99,7 +99,7 @@ fn toml_parse_error(
     }
 }
 
-/// 解析 config.toml,按 git-ai 1.4.9 `config_has_inline_hooks` + `config_hooks_feature_enabled` 等价规则判断。
+/// 解析 config.toml,按 git-ai 1.4.8 `config_has_inline_hooks` + `config_hooks_feature_enabled` 等价规则判断。
 fn probe_toml(
     toml_v: TomlValue,
     toml_path: PathBuf,
@@ -134,6 +134,17 @@ fn probe_toml(
     }
 
     let configured = configured_events == 3 && feature_enabled;
+    if !configured && legacy_json_path.exists() {
+        let legacy_status = probe_legacy_json(legacy_json_path.to_path_buf());
+        if legacy_status.configured {
+            issues.push(
+                "检测到 ~/.codex/hooks.json 里仍有 legacy git-ai Codex hooks,但 ~/.codex/config.toml 缺少新版 inline hooks;通常是 git-ai 版本过旧或仍在写 legacy 格式,请升级 git-ai 到 1.4.8+ 后重新修复".into(),
+            );
+            if excerpt.is_none() {
+                excerpt = legacy_status.raw_excerpt;
+            }
+        }
+    }
 
     AgentHookStatus {
         agent: AgentKind::Codex,
@@ -194,7 +205,7 @@ fn is_hooks_feature_enabled(toml_v: &TomlValue) -> bool {
     new_flag || legacy_flag
 }
 
-/// Legacy:~/.codex/hooks.json(git-ai 1.4.8-)。
+/// Legacy:~/.codex/hooks.json(git-ai 1.4.7-)。
 /// 检测到则标 configured=true,但 issues 明确提示用户迁移到 config.toml。
 fn probe_legacy_json(json_path: PathBuf) -> AgentHookStatus {
     let raw = match std::fs::read_to_string(&json_path) {
@@ -227,7 +238,7 @@ fn probe_legacy_json(json_path: PathBuf) -> AgentHookStatus {
     };
 
     let mut issues = vec![
-        "使用 legacy ~/.codex/hooks.json 格式,git-ai 1.4.9+ 已迁到 ~/.codex/config.toml,建议重跑 install-hooks".into(),
+        "使用 legacy ~/.codex/hooks.json 格式,git-ai 1.4.8+ 已迁到 ~/.codex/config.toml,建议重跑 install-hooks".into(),
     ];
     let mut excerpt: Option<String> = None;
     let hooks = json.get("hooks");
@@ -399,6 +410,39 @@ hooks = true
         let v: TomlValue = toml::from_str(raw).unwrap();
         let s = probe_toml(v, fake_toml_path(), &fake_json_path());
         assert!(!s.configured);
+    }
+
+    #[test]
+    fn legacy_hooks_json_with_existing_config_reports_version_hint() {
+        let dir = tempfile::tempdir().unwrap();
+        let json_path = dir.path().join("hooks.json");
+        std::fs::write(
+            &json_path,
+            r#"
+{
+  "hooks": {
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "/h/g/git-ai checkpoint codex --hook-input stdin" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "/h/g/git-ai checkpoint codex --hook-input stdin" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "/h/g/git-ai checkpoint codex --hook-input stdin" }] }]
+  }
+}
+"#,
+        )
+        .unwrap();
+        let raw = r#"
+[features]
+hooks = true
+"#;
+        let v: TomlValue = toml::from_str(raw).unwrap();
+        let s = probe_toml(v, fake_toml_path(), &json_path);
+        assert!(!s.configured);
+        assert!(
+            s.issues
+                .iter()
+                .any(|issue| issue.contains("legacy git-ai Codex hooks")),
+            "应提示 legacy hooks.json 与 git-ai 版本问题,实际 issues: {:?}",
+            s.issues
+        );
     }
 
     #[test]

@@ -809,6 +809,11 @@
       "successTemplate": "Triggered hook repair for {{agent}}",
       "errorTemplate": "Failed to fix {{agent}}"
     },
+    "codexLegacy": {
+      "title": "Codex hook is in the legacy format",
+      "bodyTemplate": "Detected git-ai {{version}}, which writes Codex hooks to ~/.codex/hooks.json (legacy). Studio needs the inline hooks in ~/.codex/config.toml from git-ai 1.4.8+. Please upgrade git-ai, then click \"Fix this\" again.",
+      "cta": "Upgrade git-ai on Install"
+    },
     "daemonRepairDialog": {
       "title": "Confirm handling the git-ai daemon lock",
       "description": "This will handle the git-ai daemon's runtime lock/pid files. If the lock is still held by a process, the git-ai processes listed in this dialog will be killed first.",

@@ -8,6 +8,12 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 
 ## [Unreleased]
 
+### Fixed
+
+- "Fix this" for an individual agent now re-probes after running `git-ai install` and reports an honest failure (with the real reason) instead of always reporting success.
+- Codex diagnostics now detect legacy `~/.codex/hooks.json` hooks and explain that inline `config.toml` hooks require git-ai 1.4.8+ (the release that migrated Codex to inline TOML), guiding the user to upgrade git-ai instead of silently staying red.
+- The Install page no longer disables "Install / Upgrade to latest" when the GitHub Releases API is unreachable (rate-limited or blocked); the official install script resolves the latest version on its own.
+
 ## [0.2.0] - 2026-05-29
 
 ### Added

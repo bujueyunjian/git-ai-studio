@@ -90,6 +90,22 @@ function genJobId() {
 }
 
 /**
+ * git-ai 是否早于 Codex inline hooks 迁移版本(1.4.8,上游提交 dedcf764a 首个 tag)。
+ * 解析前导 X.Y.Z 字典序比较;无法解析返回 false —— 反应式、不主动预判版本(对齐 diagnosticChecks 的"不预判版本")。
+ */
+function isBeforeCodexInline(version: string | null | undefined): boolean {
+  if (!version) return false;
+  const m = version.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!m) return false;
+  const cur = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const target = [1, 4, 8];
+  for (let i = 0; i < 3; i++) {
+    if (cur[i] !== target[i]) return cur[i] < target[i];
+  }
+  return false;
+}
+
+/**
  * 是否在 daemon 修复完成后推送 OS 通知。
  * 复用「daemon 异常告警」总开关 —— 修复结果是告警闭环的一部分,
  * 用户开启告警就意味着希望被通知"已处理 / 处理失败"。
@@ -333,10 +349,13 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
       qc.invalidateQueries({ queryKey: ["hooks_status"] });
       qc.invalidateQueries({ queryKey: ["claude_settings"] });
     },
-    onError: (e, agent) =>
+    onError: (e, agent) => {
+      qc.invalidateQueries({ queryKey: ["diagnose_environment"] });
+      qc.invalidateQueries({ queryKey: ["hooks_status"] });
       toast.error(t("diagnostic.repairAgent.errorTemplate", { agent: AGENT_LABEL[agent] }), {
         description: (e as Error).message,
-      }),
+      });
+    },
   });
 
   const fixM = officialFixM;
@@ -359,6 +378,15 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
   const attentionCount = checklist.problems.length + catalogHits.length + (daemonProblem ? 1 : 0);
   const configuredAgents = data ? data.agents.filter((a) => a.configured).length : 0;
   const totalAgents = data ? data.agents.length : 0;
+
+  // Codex 旧格式就地提示:仅在 Codex 真红(detected && !configured)且 git-ai < 1.4.8 时显示。
+  // 反应式触发,不主动给所有旧版用户报警;升级 git-ai 即可写新版 inline hooks。
+  const codexAgent = data?.agents.find((a) => a.agent === "Codex");
+  const showCodexLegacyHint = !!(
+    codexAgent?.detected &&
+    !codexAgent.configured &&
+    isBeforeCodexInline(data?.report.git_ai_version)
+  );
 
   // ===== empty state: git-ai not found =====
   if (data?.degraded?.kind === "git_ai_not_found") {
@@ -589,6 +617,29 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
                 );
               })}
             </div>
+            {showCodexLegacyHint && (
+              <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                <div className="flex items-start gap-2 text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div className="min-w-0 flex-1 text-xs">
+                    <div className="font-medium">{t("diagnostic.codexLegacy.title")}</div>
+                    <p className="mt-1 text-amber-800/80 dark:text-amber-300/80">
+                      {t("diagnostic.codexLegacy.bodyTemplate", {
+                        version: data.report.git_ai_version ?? "?",
+                      })}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate("install")}
+                      className="mt-2 inline-flex items-center gap-1 rounded-sm border border-amber-400 px-2 py-1 text-[11px] font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/50"
+                    >
+                      {t("diagnostic.codexLegacy.cta")}
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* 全部检查项抽屉:默认折叠的完整清单(问题已在上方"需要处理"突出);异常项置顶 + 状态 chip,detail/impact 收进 ⓘ。 */}

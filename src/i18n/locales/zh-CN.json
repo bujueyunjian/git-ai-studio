@@ -809,6 +809,11 @@
       "successTemplate": "已为 {{agent}} 触发 hook 修复",
       "errorTemplate": "修复 {{agent}} 失败"
     },
+    "codexLegacy": {
+      "title": "Codex hook 是旧格式(legacy)",
+      "bodyTemplate": "检测到 git-ai {{version}},它把 Codex hook 写在 ~/.codex/hooks.json(旧格式)。Studio 需要 git-ai 1.4.8+ 写进 ~/.codex/config.toml 的 inline hooks。请升级 git-ai 后重新点「修复此项」。",
+      "cta": "去 Install 升级 git-ai"
+    },
     "daemonRepairDialog": {
       "title": "确认处理 git-ai daemon lock",
       "description": "该操作会处理 git-ai daemon 的运行态 lock/pid 文件;如果 lock 仍被进程占用,会先结束确认框中列出的 git-ai 进程。",

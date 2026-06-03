@@ -26,9 +26,10 @@
       {
         "label": "pet",
         "url": "index.html",
-        "width": 220,
-        "height": 260,
+        "width": 180,
+        "height": 180,
         "transparent": true,
+        "backgroundColor": "#00000000",
         "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,

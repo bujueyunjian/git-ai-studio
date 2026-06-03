@@ -54,20 +54,26 @@ const REPAIR_COOLDOWN_SECS: u64 = 30;
 static LAST_REPAIR: Mutex<Option<Instant>> = Mutex::new(None);
 
 pub struct WatcherHandle {
-    /// 字段顺序就是 Drop 顺序(逆序):_stop_sentinel 先 drop 通知 worker 退出,接着
-    /// _worker 字段 drop(JoinHandle drop = detach,但有显式 Drop impl 兜底 join),
-    /// 最后 _debouncer drop 停止文件监听并 join 内部线程。
-    _stop_sentinel: mpsc::Sender<()>,
+    /// Drop 时显式 `send(())` 通知 worker 退出。不能只靠"字段 drop 顺序":本结构有显式
+    /// Drop impl,它先于字段 drop 运行,若在那里直接 join,此刻 stop 通道与 debouncer 都还
+    /// 活着,worker 的 `recv_timeout` 永远超时重转 → join 永久阻塞(本次根因)。
+    stop_tx: Option<mpsc::Sender<()>>,
     worker: Option<JoinHandle<()>>,
-    _debouncer: Debouncer<RecommendedWatcher>,
+    /// 文件去抖监听器。Drop 里先于 join 释放,断开 event 通道让 worker 的 `recv_timeout`
+    /// 立即返回 Disconnected,无需干等满一个超时周期。
+    debouncer: Option<Debouncer<RecommendedWatcher>>,
 }
 
 impl Drop for WatcherHandle {
-    /// 显式 join worker 线程,确保停用 watcher 时无悬挂线程。
-    /// JoinHandle 的默认 drop 只 detach 不 join,生产环境需要确定性资源释放。
+    /// 确定性停机,三步顺序不可乱:
+    /// ① `send(())` 置停止信号 → ② drop debouncer 断开 event 通道(worker 的 recv_timeout
+    /// 立即解除阻塞)→ ③ join worker。缺 ① / ② 任一,join 都可能长期阻塞。
     fn drop(&mut self) {
+        if let Some(tx) = self.stop_tx.take() {
+            let _ = tx.send(());
+        }
+        drop(self.debouncer.take());
         if let Some(h) = self.worker.take() {
-            // _stop_sentinel 已经在字段顺序里先 drop 了,worker 应该很快退出
             let _ = h.join();
         }
     }
@@ -92,8 +98,15 @@ pub fn apply_enabled(app: &AppHandle, state: &tauri::State<'_, AppState>, enable
                 }
             }
         }
-    } else if guard.take().is_some() {
-        emit_event(app, "info", "cc-switch 守护已停用");
+    } else {
+        // 先取出 handle 并释放 cc_switch_watcher 锁,再 drop handle:Drop 里要 join worker,
+        // 持锁 join 会拖住其它等该锁的调用。释放锁后再 drop,join 不阻塞临界区。
+        let old = guard.take();
+        drop(guard);
+        if old.is_some() {
+            emit_event(app, "info", "cc-switch 守护已停用");
+        }
+        // old 在此作用域结束 drop:send stop → drop debouncer → join worker(已不持锁)。
     }
 }
 
@@ -143,32 +156,48 @@ fn spawn_watcher(app: AppHandle) -> Result<WatcherHandle, String> {
 
     let app_for_worker = app.clone();
     let worker = thread::spawn(move || {
-        loop {
-            if stop_rx.try_recv().is_ok() {
-                break;
-            }
-            match event_rx.recv_timeout(Duration::from_secs(1)) {
-                Ok(_) => {
-                    // 冷却期检查:成功修复后 30s 内的事件全部跳过
-                    if in_cooldown() {
-                        continue;
-                    }
-                    let app_clone = app_for_worker.clone();
-                    tauri::async_runtime::spawn(async move {
-                        check_and_repair(app_clone).await;
-                    });
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            }
-        }
+        run_watcher_loop(stop_rx, event_rx, move || {
+            let app_clone = app_for_worker.clone();
+            tauri::async_runtime::spawn(async move {
+                check_and_repair(app_clone).await;
+            });
+        });
     });
 
     Ok(WatcherHandle {
-        _stop_sentinel: stop_tx,
+        stop_tx: Some(stop_tx),
         worker: Some(worker),
-        _debouncer: debouncer,
+        debouncer: Some(debouncer),
     })
+}
+
+/// worker 线程主循环。抽成独立函数,便于单测覆盖"停机不阻塞"而无需起 tauri / notify。
+///
+/// 退出条件(任一即退出):收到 stop 信号、stop 通道断开、event 通道断开(debouncer 被 drop)。
+/// `try_recv` 把 `Disconnected` 也当退出;叠加 debouncer drop 触发的 `recv_timeout`
+/// Disconnected,两条路都能让循环立即结束,不必干等满一个 1s 超时。
+fn run_watcher_loop(
+    stop_rx: mpsc::Receiver<()>,
+    event_rx: mpsc::Receiver<DebounceEventResult>,
+    on_event: impl Fn(),
+) {
+    loop {
+        match stop_rx.try_recv() {
+            Ok(_) | Err(mpsc::TryRecvError::Disconnected) => break,
+            Err(mpsc::TryRecvError::Empty) => {}
+        }
+        match event_rx.recv_timeout(Duration::from_secs(1)) {
+            Ok(_) => {
+                // 冷却期检查:成功修复后 30s 内的事件全部跳过
+                if in_cooldown() {
+                    continue;
+                }
+                on_event();
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+    }
 }
 
 fn watch_path_or_parent(debouncer: &mut Debouncer<RecommendedWatcher>, path: &Path) -> bool {
@@ -344,4 +373,47 @@ fn emit_event(app: &AppHandle, level: &str, message: &str) {
         "cc-switch-watcher://event",
         json!({ "level": level, "message": message }),
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::Instant;
+
+    /// 回归:复刻 WatcherHandle::drop 的停机序列(send stop → drop event sender),
+    /// run_watcher_loop 必须立即退出、join 不卡死。修复前 Drop 先 join,而 stop 通道与
+    /// debouncer 都还活着 → worker 干转、join 永久阻塞,set_app_settings 长期 pending。
+    #[test]
+    fn watcher_loop_stops_promptly_on_drop_sequence() {
+        let (event_tx, event_rx) = mpsc::channel::<DebounceEventResult>();
+        let (stop_tx, stop_rx) = mpsc::channel::<()>();
+        let worker = thread::spawn(move || run_watcher_loop(stop_rx, event_rx, || {}));
+
+        let start = Instant::now();
+        let _ = stop_tx.send(());
+        drop(event_tx); // 等价 drop debouncer:断开 event 通道,recv_timeout 立即返回 Disconnected
+        worker.join().expect("worker 应能 join");
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "停机序列后 worker 应立即退出(<1s),实际 {:?}",
+            start.elapsed()
+        );
+    }
+
+    /// 仅断开 event 通道(等价只 drop debouncer、不发 stop)也应立即退出。
+    #[test]
+    fn watcher_loop_stops_when_event_channel_disconnects() {
+        let (event_tx, event_rx) = mpsc::channel::<DebounceEventResult>();
+        let (_stop_tx, stop_rx) = mpsc::channel::<()>();
+        let worker = thread::spawn(move || run_watcher_loop(stop_rx, event_rx, || {}));
+
+        let start = Instant::now();
+        drop(event_tx);
+        worker.join().expect("worker 应能 join");
+        assert!(
+            start.elapsed() < Duration::from_secs(1),
+            "event 通道断开后 worker 应立即退出,实际 {:?}",
+            start.elapsed()
+        );
+    }
 }

@@ -1141,7 +1141,7 @@
           "a": [
             {
               "kind": "text",
-              "text": "AI authorship lives in refs/notes/ai. git-ai's post-push hook normally syncs that ref to the remote after git push. If the team dashboard still sees nothing, sync the notes manually with these three steps:"
+              "text": "AI authorship lives in refs/notes/ai — a separate git ref that a normal git push does not carry by default. git-ai's proxy plus its background daemon sync that ref after you run git push through the git-ai channel (the daemon detects the completed push via trace2 and pushes it — this is not a git hook). Preconditions: the push went through the git-ai proxy (not your IDE/GUI's bundled git), the daemon is healthy, and you are in logged-out / local notes mode; otherwise it is not pushed automatically. If you push via an IDE/GUI, or the team dashboard still sees nothing, sync the notes manually with these three steps:"
             },
             {
               "kind": "cmd",

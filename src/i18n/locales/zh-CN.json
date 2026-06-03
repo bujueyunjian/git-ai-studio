@@ -1141,7 +1141,7 @@
           "a": [
             {
               "kind": "text",
-              "text": "AI 归属存在 refs/notes/ai。git-ai 的 post-push hook 通常会在 git push 之后自动把该 ref 同步到远端;若团队看板仍看不到,可手动执行下面三步同步:"
+              "text": "AI 归属存在 refs/notes/ai —— 它是独立的 git ref,普通 git push 默认不会带上它。git-ai 的代理 + 后台 daemon 会在「经 git-ai 通道执行的 git push」之后自动同步该 ref(daemon 经 trace2 探测到 push 完成后推送,不是 git 钩子)。前提:push 走了 git-ai 代理(而非 IDE / GUI 自带 git)、daemon 健康、且处于登出 / 本地 notes 模式;否则不会自动推。若你用 IDE / GUI 推代码、或团队看板仍看不到,手动执行下面三步同步:"
             },
             {
               "kind": "cmd",

@@ -34,6 +34,14 @@ import type { RouteId } from "../../router";
  */
 const SELECTOR_SEARCH_THRESHOLD = 10;
 
+function formatBranchHoverText(name: string, sha: string | null): string {
+  return sha ? `${name}\n${sha}` : name;
+}
+
+function branchSearchValue(name: string, sha: string): string {
+  return `${name} ${sha} ${sha.slice(0, 7)}`;
+}
+
 interface Props {
   onNavigate: (r: RouteId) => void;
   onRepoChanged?: () => void;
@@ -261,6 +269,7 @@ function BranchSwitcher({
 
   const branches = branchesQ.data?.status === "ok" ? branchesQ.data.branches : [];
   const currentLabel = repo.head_branch ?? "detached";
+  const currentHoverText = formatBranchHoverText(currentLabel, repo.head_sha);
   const busy = checkoutM.isPending;
 
   return (
@@ -270,7 +279,8 @@ function BranchSwitcher({
           type="button"
           disabled={busy}
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-muted disabled:opacity-60"
-          title={t("topBar.branch.triggerTitle")}
+          title={currentHoverText}
+          aria-label={t("topBar.branch.triggerTitle")}
         >
           {busy ? (
             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
@@ -281,11 +291,9 @@ function BranchSwitcher({
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[280px] max-w-none p-0">
+      <PopoverContent align="start" className="w-[420px] max-w-none p-0">
         <Command>
-          {branches.length > SELECTOR_SEARCH_THRESHOLD && (
-            <CommandInput placeholder={t("topBar.branch.searchPlaceholder")} />
-          )}
+          <CommandInput placeholder={t("topBar.branch.searchPlaceholder")} />
           <CommandList>
             <CommandEmpty>{t("topBar.branch.noMatch")}</CommandEmpty>
             <CommandGroup heading={t("topBar.branch.heading")}>
@@ -307,15 +315,16 @@ function BranchSwitcher({
               {branches.map((b) => (
                 <CommandItem
                   key={b.name}
-                  value={b.name}
-                  disabled={b.is_current || busy}
+                  value={branchSearchValue(b.name, b.sha)}
+                  disabled={busy}
+                  title={formatBranchHoverText(b.name, b.sha)}
                   onSelect={() => {
                     if (!b.is_current) {
                       setOpen(false);
                       checkoutM.mutate(b.name);
                     }
                   }}
-                  className="flex items-center justify-between gap-2"
+                  className="flex items-center justify-between gap-3"
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     {b.is_current ? (
@@ -323,6 +332,8 @@ function BranchSwitcher({
                     ) : (
                       <span className="h-3 w-3 shrink-0" aria-hidden="true" />
                     )}
+                    {/* 不在内部 span 上加 title:行级 CommandItem 的 title(全名+SHA)才是完整
+                        hover 文本,内部 title={b.name} 会把它覆盖成"只剩分支名"。 */}
                     <span className="truncate font-mono">{b.name}</span>
                   </span>
                   <span className="shrink-0 font-mono text-[10px] text-muted-foreground">

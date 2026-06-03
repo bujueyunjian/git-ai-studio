@@ -19,6 +19,7 @@ import {
   FolderGit2,
   FolderOpen,
   Loader2,
+  Plus,
   Search,
   Sparkles,
   Wrench,
@@ -31,9 +32,11 @@ import { toast } from "sonner";
 import { Dialog } from "./ui/DialogShell";
 import {
   discoverRepos,
+  getAggregateRepos,
   getGitAiConfig,
   getHooksStatus,
   selectRepo,
+  setAggregateRepos,
   setAppSettings,
   setScanRoots,
 } from "../lib/api";
@@ -136,19 +139,31 @@ export function RepoSetupGuide({ settings, onRepoChanged }: Props) {
       toast.error(t("repoSetupGuide.toast.scanFailed"), { description: (e as Error).message }),
   });
 
-  const selectM = useMutation({
-    mutationFn: async (repo: RepoEntry) => {
-      await selectRepo(repo.path);
-      return repo;
+  // 批量加入聚合集(并集去重,复用 Repo 页 aggregateAll 语义)+ 把第一个设为当前仓
+  // (否则 Stats/Blame 仍空),然后进 hook 检查。引导默认走批量;单仓精细管理在 Repo 页。
+  const addReposM = useMutation({
+    mutationFn: async (toAdd: RepoEntry[]) => {
+      if (toAdd.length === 0) throw new Error(t("repoSetupGuide.toast.rootRequired"));
+      const existing = await getAggregateRepos();
+      const union = new Set([...existing.map((e) => e.path), ...toAdd.map((r) => r.path)]);
+      await setAggregateRepos([...union]);
+      await selectRepo(toAdd[0].path);
+      return { count: toAdd.length, name: toAdd[0].name };
     },
-    onSuccess: (repo) => {
-      toast.success(t("repoSetupGuide.toast.repoSelected"), { description: repo.path });
+    onSuccess: ({ count, name }) => {
+      toast.success(t("repoSetupGuide.toast.reposAdded", { n: count, name }));
+      void qc.invalidateQueries({ queryKey: ["aggregate_repos"] });
       onRepoChanged();
       setStep(3); // 进 hook 检查
     },
     onError: (e) =>
-      toast.error(t("repoSetupGuide.toast.selectFailed"), { description: (e as Error).message }),
+      toast.error(t("repoSetupGuide.toast.addFailed"), { description: (e as Error).message }),
   });
+  // 单仓「加入」按钮的精确 spinner 归属:仅当本次 mutate 的是单个仓时取其 path。
+  const addingSinglePath =
+    addReposM.isPending && addReposM.variables?.length === 1
+      ? addReposM.variables?.[0]?.path
+      : undefined;
 
   const skipM = useMutation({
     mutationFn: markSeen,
@@ -220,9 +235,11 @@ export function RepoSetupGuide({ settings, onRepoChanged }: Props) {
             onRootChange={setRoot}
             repos={repos}
             scanning={scanM.isPending || reposQ.isFetching}
-            selectingPath={selectM.isPending ? selectM.variables?.path : undefined}
+            scanned={reposQ.isFetched}
+            busy={addReposM.isPending}
+            addingPath={addingSinglePath}
             onScan={() => scanM.mutate()}
-            onSelect={(repo) => selectM.mutate(repo)}
+            onAdd={(toAdd) => addReposM.mutate(toAdd)}
           />
         )}
         {step === 3 && (
@@ -450,17 +467,21 @@ function RepoStep({
   onRootChange,
   repos,
   scanning,
-  selectingPath,
+  scanned,
+  busy,
+  addingPath,
   onScan,
-  onSelect,
+  onAdd,
 }: {
   root: string;
   onRootChange: (v: string) => void;
   repos: RepoEntry[];
   scanning: boolean;
-  selectingPath: string | undefined;
+  scanned: boolean;
+  busy: boolean;
+  addingPath: string | undefined;
   onScan: () => void;
-  onSelect: (repo: RepoEntry) => void;
+  onAdd: (repos: RepoEntry[]) => void;
 }) {
   const { t } = useTranslation();
   const handlePick = async () => {
@@ -473,6 +494,14 @@ function RepoStep({
   };
   return (
     <div className="space-y-3">
+      {/* 为什么要选仓库:讲清「加入聚合集 → Dashboard 跨仓 / 第一个设当前仓 → Stats·Blame 单仓」 */}
+      <div className="rounded-md border border-primary/30 bg-primary/5 p-3 text-xs dark:border-primary/30 dark:bg-primary/10">
+        <div className="font-medium text-primary">{t("repoSetupGuide.repo.purposeTitle")}</div>
+        <p className="mt-1 text-primary/80 dark:text-primary/80">
+          {t("repoSetupGuide.repo.purposeBody")}
+        </p>
+      </div>
+
       {/* 主行动:原生目录选择器 + 显示已选路径 + 扫描按钮 */}
       <div className="flex items-center gap-2">
         <button
@@ -516,10 +545,34 @@ function RepoStep({
           className="mt-1 w-full rounded-md border border-slate-200 px-3 py-1.5 font-mono text-xs dark:border-border dark:bg-card"
         />
       </details>
+      {/* 扫描有结果:批量「全部加入 (N)」行 —— 全部并入聚合集 + 第一个设当前仓 */}
+      {repos.length > 0 && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
+          <span className="text-xs text-muted-foreground">
+            {t("repoSetupGuide.repo.foundCount", { n: repos.length })}
+          </span>
+          <button
+            type="button"
+            onClick={() => onAdd(repos)}
+            disabled={busy}
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {busy && addingPath === undefined ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Plus className="h-3.5 w-3.5" />
+            )}
+            {t("repoSetupGuide.repo.addAll", { n: repos.length })}
+          </button>
+        </div>
+      )}
+
       <div className="max-h-64 overflow-y-auto rounded-md border border-border">
         {repos.length === 0 ? (
           <div className="px-4 py-8 text-center text-xs text-slate-500">
-            {t("repoSetupGuide.repo.emptyHint")}
+            {scanned
+              ? t("repoSetupGuide.repo.emptyAfterScan")
+              : t("repoSetupGuide.repo.pickThenScan")}
           </div>
         ) : (
           <ul className="divide-y divide-border">
@@ -532,11 +585,12 @@ function RepoStep({
                 </div>
                 <button
                   type="button"
-                  onClick={() => onSelect(repo)}
-                  disabled={selectingPath === repo.path}
-                  className="rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-50 dark:bg-primary/10 dark:text-primary"
+                  onClick={() => onAdd([repo])}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/15 disabled:opacity-50 dark:bg-primary/10 dark:text-primary"
                 >
-                  {t("repoSetupGuide.repo.select")}
+                  {addingPath === repo.path && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {t("repoSetupGuide.repo.addOne")}
                 </button>
               </li>
             ))}

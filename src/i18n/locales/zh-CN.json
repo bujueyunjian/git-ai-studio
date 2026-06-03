@@ -898,7 +898,7 @@
       },
       "repo": {
         "title": "配置本地仓库",
-        "hint": "选一个本地 Git 仓库,Dashboard / Stats / Blame 都会以它为对象。"
+        "hint": "扫描你的代码目录,把要分析的仓库一键加入聚合集;Dashboard 看跨仓汇总,Stats / Blame 看单仓。"
       },
       "hook": {
         "title": "检查 hook 配置",
@@ -912,8 +912,8 @@
     "toast": {
       "rootRequired": "请先输入扫描根目录",
       "scanFailed": "扫描仓库失败",
-      "repoSelected": "已选择仓库",
-      "selectFailed": "选择仓库失败",
+      "reposAdded": "已加入 {{n}} 个仓库到聚合集,当前仓设为 {{name}}",
+      "addFailed": "加入仓库失败",
       "skipped": "已跳过引导,可在 设置 → 通用 中再次打开",
       "saveStateFailed": "保存引导状态失败",
       "pickDirFailed": "打开目录选择器失败"
@@ -943,14 +943,19 @@
     },
     "recheck": "重新检查",
     "repo": {
+      "purposeTitle": "为什么要选仓库",
+      "purposeBody": "Studio 按仓库展示 AI 归因。把仓库加入「聚合集」后,它们会一起汇总进 Dashboard 跨仓视图;其中第一个会被设为「当前仓」,供 Stats / Blame 单仓下钻。",
       "pickDialogTitle": "选择代码根目录",
       "pickDir": "选择目录",
       "noDirPicked": "未选择目录",
       "scan": "扫描",
       "pasteAdvanced": "直接粘路径(高级)",
       "pathPlaceholder": "例如 D:\\script",
-      "emptyHint": "点上方「选择目录」选根目录后,点「扫描」会列出该目录下发现的 Git 仓库;选中后自动进入下一步。",
-      "select": "选中"
+      "pickThenScan": "先点上方「选择目录」选你存放代码的总目录(例如 ~/code、D:\\projects,不用精确到单个仓),再点「扫描」。",
+      "emptyAfterScan": "该目录下没找到 Git 仓库。换一个更上层的目录,或确认里面确实有 .git 仓库。",
+      "foundCount": "发现 {{n}} 个 Git 仓库",
+      "addAll": "全部加入 ({{n}})",
+      "addOne": "加入"
     },
     "hook": {
       "checking": "正在读取 hook 配置…",

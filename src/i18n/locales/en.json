@@ -898,7 +898,7 @@
       },
       "repo": {
         "title": "Configure a local repository",
-        "hint": "Pick a local Git repository. Dashboard / Stats / Blame all operate on it."
+        "hint": "Scan your code folder and add repos to the aggregate set in one click — Dashboard shows the cross-repo roll-up, Stats / Blame show a single repo."
       },
       "hook": {
         "title": "Check hook configuration",
@@ -912,8 +912,8 @@
     "toast": {
       "rootRequired": "Please enter a scan root directory first.",
       "scanFailed": "Failed to scan repositories",
-      "repoSelected": "Repository selected",
-      "selectFailed": "Failed to select repository",
+      "reposAdded": "Added {{n}} repo(s) to the aggregate set; current repo set to {{name}}",
+      "addFailed": "Failed to add repositories",
       "skipped": "Onboarding skipped. You can reopen it from Settings → General.",
       "saveStateFailed": "Failed to save onboarding state",
       "pickDirFailed": "Failed to open directory picker"
@@ -943,14 +943,19 @@
     },
     "recheck": "Re-check",
     "repo": {
+      "purposeTitle": "Why pick repositories",
+      "purposeBody": "Studio shows AI attribution per repository. Repos you add to the aggregate set roll up into the Dashboard cross-repo view; the first one becomes the current repo for single-repo drill-down in Stats / Blame.",
       "pickDialogTitle": "Choose a code root directory",
       "pickDir": "Choose directory",
       "noDirPicked": "No directory selected",
       "scan": "Scan",
       "pasteAdvanced": "Paste path directly (advanced)",
       "pathPlaceholder": "e.g. D:\\script",
-      "emptyHint": "Click \"Choose directory\" above to pick a root, then click \"Scan\" to list the Git repositories found under it. Selecting one automatically continues to the next step.",
-      "select": "Select"
+      "pickThenScan": "Click \"Choose directory\" above and pick the parent folder where you keep your code (e.g. ~/code, D:\\projects — no need to drill down to a single repo), then click \"Scan\".",
+      "emptyAfterScan": "No Git repos found here. Try a higher-level folder, or check that it actually contains .git repos.",
+      "foundCount": "Found {{n}} Git repo(s)",
+      "addAll": "Add all ({{n}})",
+      "addOne": "Add"
     },
     "hook": {
       "checking": "Reading hook configuration…",

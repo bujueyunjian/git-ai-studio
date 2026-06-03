@@ -11,6 +11,27 @@ import { cn } from "../lib/cn";
 import { commitTotal } from "../lib/formulas";
 import type { CommitWithStats } from "../lib/types";
 
+/** t 的宽松别名:传入模块级 helper 拼 hover 文案,走 i18n 又绕开 i18next 严格 key 类型的深实例化(TS2589)。 */
+type Translate = (key: string) => string;
+
+function formatCommitHoverText(
+  commit: CommitWithStats,
+  aiPercent: number,
+  failed: boolean,
+  t: Translate,
+): string {
+  return [
+    commit.subject,
+    `${t("commitList.hover.sha")}: ${commit.sha}`,
+    `${t("commitList.hover.author")}: ${commit.author_name} <${commit.author_email}>`,
+    `${t("commitList.hover.time")}: ${commit.authored_at}`,
+    `${t("commitList.hover.ai")}: ${failed ? t("commitList.failed") : `${aiPercent}%`}`,
+    commit.is_merge ? t("commitList.hover.mergeCommit") : null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
 export function CommitAttributionList({
   commits,
   failedShas,
@@ -59,10 +80,12 @@ function CommitRow({
   const { t } = useTranslation();
   const total = commitTotal(commit.stats);
   const pct = total > 0 ? Math.round((commit.stats.ai_additions / total) * 100) : 0;
+  const hoverText = formatCommitHoverText(commit, pct, failed, t as unknown as Translate);
   return (
     <button
       type="button"
       onClick={onSelect}
+      title={hoverText}
       className={cn(
         "flex w-full items-center gap-3 px-3 py-1.5 text-left text-xs",
         selected ? "bg-primary/10" : "hover:bg-muted/40",
@@ -73,16 +96,15 @@ function CommitRow({
         className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary"
         style={{ opacity: failed ? 0.12 : 0.18 + 0.82 * (pct / 100) }}
       />
-      <span className="min-w-0 flex-1 truncate text-foreground">
+      <span className="min-w-0 flex-1 truncate text-foreground" title={hoverText}>
         {commit.subject}
         {commit.is_merge && <span className="ml-1 text-muted-foreground/60">(merge)</span>}
       </span>
-      <span className="w-20 shrink-0 truncate text-muted-foreground">{commit.author_name}</span>
+      <span className="w-20 shrink-0 truncate text-muted-foreground" title={hoverText}>
+        {commit.author_name}
+      </span>
       {failed ? (
-        <span
-          className="w-14 shrink-0 text-right text-[11px] text-danger"
-          title={t("commitList.failedTitle")}
-        >
+        <span className="w-14 shrink-0 text-right text-[11px] text-danger" title={hoverText}>
           {t("commitList.failed")}
         </span>
       ) : (

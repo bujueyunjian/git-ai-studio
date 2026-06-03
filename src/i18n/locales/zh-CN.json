@@ -667,7 +667,14 @@
     "empty": "没有匹配的 commit",
     "failed": "失败",
     "failedTitle": "采集失败",
-    "countTemplate": "{{n}} 个 commit"
+    "countTemplate": "{{n}} 个 commit",
+    "hover": {
+      "sha": "SHA",
+      "author": "作者",
+      "time": "时间",
+      "ai": "AI",
+      "mergeCommit": "合并提交"
+    }
   },
   "changedFiles": {
     "title": "本 commit 改动文件",

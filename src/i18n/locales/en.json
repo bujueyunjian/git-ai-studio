@@ -667,7 +667,14 @@
     "empty": "No matching commits",
     "failed": "Failed",
     "failedTitle": "Collection failed",
-    "countTemplate": "{{n}} commits"
+    "countTemplate": "{{n}} commits",
+    "hover": {
+      "sha": "SHA",
+      "author": "Author",
+      "time": "Time",
+      "ai": "AI",
+      "mergeCommit": "Merge commit"
+    }
   },
   "changedFiles": {
     "title": "Files changed in this commit",

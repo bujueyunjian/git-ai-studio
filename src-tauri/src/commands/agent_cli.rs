@@ -28,14 +28,29 @@ pub struct NpmStatus {
     pub path: Option<String>,
 }
 
+/// 强制重读登录环境的真实 PATH(unix 跑登录 shell / Windows 重读注册表 live PATH)并更新
+/// `env_path` 的镜像。供前端"重新检测"按钮调用,使运行期才安装的 Node 不重启即可被识别。
+///
+/// 启动时已 `env_path::ensure_patched` 跑过一次,故 detect_* 自动探测直接走镜像、**不**在每次
+/// 探测都 fork 登录 shell(首屏 0 次 shell);只有用户显式"重新检测"才付费重读。
+/// spawn_blocking:refresh 会 fork 登录 shell,不能阻塞 async runtime。探测失败(shell 超时
+/// /注册表读不到)→ Err,前端弹红 toast(响亮失败),用户得以区分"环境没读到"与"确实没装"。
+#[tauri::command]
+pub async fn refresh_path_env() -> Result<(), String> {
+    tokio::task::spawn_blocking(crate::env_path::refresh)
+        .await
+        .map_err(|e| format!("PATH 刷新任务异常:{e}"))?
+}
+
 #[tauri::command]
 pub async fn detect_npm() -> Result<NpmStatus, String> {
     match agent_cli::resolve_npm() {
         Ok(path) => {
-            let version = crate::proc::run_capture_with_timeout(
+            let version = crate::proc::run_capture_with_env_timeout(
                 &path,
                 &["--version"],
                 None,
+                &[("PATH".into(), crate::env_path::real_path())],
                 Duration::from_secs(5),
             )
             .await
@@ -76,12 +91,14 @@ pub async fn install_agent_cli(
     let topic = format!("install://{job_id}/log");
     let args = agent_cli::build_install_args(agent, version.as_deref());
     let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
+    // 注入真实 PATH:npm 自身要找 node,装完的 postinstall 脚本也可能 spawn node。
+    let env = [("PATH".to_string(), crate::env_path::real_path())];
     let result = run_streaming(
         &app,
         &npm,
         &args_ref,
         None,
-        &[],
+        &env,
         &topic,
         Duration::from_secs(AGENT_INSTALL_TIMEOUT_SECS),
     )
@@ -115,12 +132,13 @@ pub async fn uninstall_agent_cli(
     let topic = format!("install://{job_id}/log");
     let args = agent_cli::build_uninstall_args(agent);
     let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
+    let env = [("PATH".to_string(), crate::env_path::real_path())];
     let result = run_streaming(
         &app,
         &npm,
         &args_ref,
         None,
-        &[],
+        &env,
         &topic,
         Duration::from_secs(AGENT_INSTALL_TIMEOUT_SECS),
     )

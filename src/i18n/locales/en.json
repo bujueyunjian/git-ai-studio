@@ -724,6 +724,7 @@
       "npmMissing": "npm not found",
       "npmMissingHint": "Install Node.js (which bundles npm) first, then re-check:",
       "recheckNpm": "Re-check npm",
+      "recheckFailed": "Could not read your shell environment PATH",
       "checking": "Checking…",
       "installedUnknown": "Installed (version unknown)",
       "notInstalled": "Not installed",

@@ -44,6 +44,10 @@ tauri-plugin-updater = "2"
 # 更新安装后重启进程(配合 updater 的 install-then-restart 流程)
 tauri-plugin-process = "2"
 
+# Windows 专属:从注册表读 live PATH(env_path 模块),绕开进程的旧 PATH 快照
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
 [profile.release]
 codegen-units = 1
 lto = "thin"

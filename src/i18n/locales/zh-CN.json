@@ -724,6 +724,7 @@
       "npmMissing": "未检测到 npm",
       "npmMissingHint": "请先安装 Node.js(自带 npm),然后重新检测:",
       "recheckNpm": "重新检测 npm",
+      "recheckFailed": "无法读取你的 shell 环境 PATH",
       "checking": "检测中…",
       "installedUnknown": "已装(版本未知)",
       "notInstalled": "未安装",

@@ -59,7 +59,20 @@ pub async fn run_capture_with_timeout(
     cwd: Option<&Path>,
     timeout: Duration,
 ) -> Result<CaptureOutput> {
-    run_capture_internal(program, args, cwd, None, timeout).await
+    run_capture_internal(program, args, cwd, None, &[], timeout).await
+}
+
+/// 同 run_capture_with_timeout,但额外向子进程注入 env(键值覆盖继承环境)。用于把
+/// `env_path` 的真实 PATH 镜像传给探测子进程(如 `claude --version` 的
+/// `#!/usr/bin/env node` shebang 需要 node 在 PATH),不依赖全局 set_var。
+pub async fn run_capture_with_env_timeout(
+    program: &Path,
+    args: &[&str],
+    cwd: Option<&Path>,
+    env: &[(String, String)],
+    timeout: Duration,
+) -> Result<CaptureOutput> {
+    run_capture_internal(program, args, cwd, None, env, timeout).await
 }
 
 /// 同 run_capture_with_timeout,但允许向子进程 stdin 一次性写入 `stdin_input` 然后关闭。
@@ -71,7 +84,7 @@ pub async fn run_capture_with_stdin(
     stdin_input: &str,
     timeout: Duration,
 ) -> Result<CaptureOutput> {
-    run_capture_internal(program, args, cwd, Some(stdin_input), timeout).await
+    run_capture_internal(program, args, cwd, Some(stdin_input), &[], timeout).await
 }
 
 async fn run_capture_internal(
@@ -79,6 +92,7 @@ async fn run_capture_internal(
     args: &[&str],
     cwd: Option<&Path>,
     stdin_input: Option<&str>,
+    env: &[(String, String)],
     timeout: Duration,
 ) -> Result<CaptureOutput> {
     let mut cmd = tokio::process::Command::new(program);
@@ -92,6 +106,9 @@ async fn run_capture_internal(
         .stderr(Stdio::piped());
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
+    }
+    for (k, v) in env {
+        cmd.env(k, v);
     }
     // git/git-ai stderr 英文化(评审 P6 #33 全局 hardening):中文 locale 下
     // git 错误信息会本地化(如"致命错误"代替"fatal: ..."),让我们的 stderr 关键词

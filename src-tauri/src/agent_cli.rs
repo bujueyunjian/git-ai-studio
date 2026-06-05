@@ -55,21 +55,22 @@ impl AgentCli {
     }
 }
 
-/// 解析 `npm` 可执行文件。
+/// 解析 `npm` 可执行文件,走 `env_path` 的真实 PATH 镜像(绕开 GUI 被截断的进程 PATH,
+/// 且运行期"重新检测"刷新镜像后立即生效)。
 ///
-/// Windows 上 npm 实为 `npm.cmd` shim,`which::which("npm")` 会解析到它;直接
-/// `spawn("npm")` 找不到。Rust `Command` 自 BatBadBut 修复后支持以路径直接拉起
-/// `.cmd`(内部经 cmd.exe + 转义),故拿到此路径交给 `proc::run_streaming` 即可。
+/// Windows 上 npm 实为 `npm.cmd` shim,`which_in` 会解析到它;直接 `spawn("npm")` 找不到。
+/// Rust `Command` 自 BatBadBut 修复后支持以路径直接拉起 `.cmd`(内部经 cmd.exe + 转义),
+/// 故拿到此路径交给 `proc::run_streaming` 即可。
 pub fn resolve_npm() -> Result<PathBuf, String> {
-    which::which("npm")
-        .map_err(|_| "未找到 npm,请先安装 Node.js(https://nodejs.org)后重试".to_string())
+    crate::env_path::which_in_real_path("npm")
+        .ok_or_else(|| "未找到 npm,请先安装 Node.js(https://nodejs.org)后重试".to_string())
 }
 
 /// 探测某个 CLI 是否已安装及其版本。未装返回 `installed=false`(预期空态,非错误)。
 pub async fn detect(agent: AgentCli) -> InstalledVersion {
-    let bin = match which::which(agent.bin_name()) {
-        Ok(p) => p,
-        Err(_) => {
+    let bin = match crate::env_path::which_in_real_path(agent.bin_name()) {
+        Some(p) => p,
+        None => {
             return InstalledVersion {
                 installed: false,
                 version: None,
@@ -77,10 +78,12 @@ pub async fn detect(agent: AgentCli) -> InstalledVersion {
             };
         }
     };
-    let version = match crate::proc::run_capture_with_timeout(
+    // 注入真实 PATH:`claude`/`codex` 是 `#!/usr/bin/env node` 脚本,shebang 需 node 在 PATH。
+    let version = match crate::proc::run_capture_with_env_timeout(
         &bin,
         &["--version"],
         None,
+        &[("PATH".into(), crate::env_path::real_path())],
         Duration::from_secs(5),
     )
     .await

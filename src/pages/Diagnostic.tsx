@@ -30,6 +30,7 @@ import {
   installHooksForAgent,
   installHooksOfficial,
   invalidateDiagnosticCache,
+  refreshPathEnv,
   repairGitAiDaemon,
 } from "../lib/api";
 import { notify } from "../lib/osNotify";
@@ -224,6 +225,9 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
 
   const refreshM = useMutation({
     mutationFn: async () => {
+      // 先 best-effort 重读真实 PATH(覆盖"App 运行后才装 git-ai/git"),失败不阻断诊断刷新
+      // ——本操作的契约是刷新诊断,PATH 重读是附带;它自身失败在 agent_cli 页才响亮上报。
+      await refreshPathEnv().catch(() => {});
       await invalidateDiagnosticCache();
       return diagnoseEnvironment(true);
     },

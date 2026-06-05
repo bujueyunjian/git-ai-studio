@@ -5,7 +5,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
-import { detectAgentCli, detectNpm, installAgentCli, uninstallAgentCli } from "../lib/api";
+import {
+  detectAgentCli,
+  detectNpm,
+  installAgentCli,
+  refreshPathEnv,
+  uninstallAgentCli,
+} from "../lib/api";
 import { cn } from "../lib/cn";
 import type { AgentCli, InstallLogEvent } from "../lib/types";
 import { Badge } from "./Badge";
@@ -33,6 +39,24 @@ export function AgentCliInstaller() {
 
   const npmQ = useQuery({ queryKey: ["npm_status"], queryFn: detectNpm, staleTime: 30_000 });
   const npmAvailable = !!npmQ.data?.available;
+
+  // "重新检测":强制重读登录环境真实 PATH(覆盖"App 启动后才装 Node"),一次刷新即重探
+  // npm + 两个 agent。自动探测信任启动时已 patch 的 PATH,不在此付费跑登录 shell。
+  // refresh + 后续重探全 await 进 mutationFn,故 rechecking=isPending 精确反映本次操作、
+  // 不被窗口聚焦等后台 refetch 误触发;refresh 失败(shell 超时)则弹红 toast 响亮上报。
+  const recheckM = useMutation({
+    mutationFn: async () => {
+      await refreshPathEnv();
+      await npmQ.refetch();
+      await qc.invalidateQueries({ queryKey: ["agent_cli"] });
+    },
+    onError: (e) =>
+      toast.error(t("diagnostic.agentCli.recheckFailed"), {
+        description: (e as Error).message,
+        duration: 6_000,
+      }),
+  });
+  const rechecking = recheckM.isPending;
 
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [exitOk, setExitOk] = useState<boolean | null>(null);
@@ -139,11 +163,11 @@ export function AgentCliInstaller() {
             </p>
             <button
               type="button"
-              onClick={() => npmQ.refetch()}
-              disabled={npmQ.isFetching}
+              onClick={() => recheckM.mutate()}
+              disabled={rechecking}
               className="mt-1 inline-flex items-center gap-1 underline underline-offset-2 hover:text-amber-900 disabled:opacity-50 dark:hover:text-amber-200"
             >
-              <RefreshCw className={cn("h-3 w-3", npmQ.isFetching && "animate-spin")} />
+              <RefreshCw className={cn("h-3 w-3", rechecking && "animate-spin")} />
               {t("diagnostic.agentCli.recheckNpm")}
             </button>
           </div>

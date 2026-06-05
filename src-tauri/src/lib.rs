@@ -16,6 +16,7 @@ pub mod auto_launch;
 pub mod cc_switch_watcher;
 pub mod commands;
 pub mod db;
+pub mod env_path;
 pub mod error;
 pub mod git_ai;
 pub mod hooks;
@@ -51,6 +52,10 @@ fn restore_main_window(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // 最早修正进程 PATH:GUI 从 Finder/资源管理器启动只继承最小 PATH,nvm/Homebrew/fnm
+    // 装的 node/npm/claude/codex 不可见。须在任何子进程 spawn、tokio 多线程起来之前打补丁。
+    env_path::ensure_patched();
+
     // 日志统一走 `log` crate + `tauri-plugin-log`(下方 builder 链注册)。
     // 不再装 tracing-subscriber:它默认带 tracing-log 桥接,会抢 `log::set_logger` 的 slot,
     // 导致随后 tauri-plugin-log 注册时 panic("attempted to set a logger after ...")。
@@ -168,6 +173,7 @@ pub fn run() {
             commands::install::set_git_ai_config,
             commands::install::set_auto_update,
             commands::install::install_history,
+            commands::agent_cli::refresh_path_env,
             commands::agent_cli::detect_npm,
             commands::agent_cli::detect_agent_cli,
             commands::agent_cli::install_agent_cli,

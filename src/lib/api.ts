@@ -105,6 +105,8 @@ export const setAutoUpdate = (enabled: boolean) =>
 export const getInstallHistory = () => call<InstallHistoryEntry[]>("install_history");
 
 // AI 编码 CLI(Claude Code / Codex)的 npm 装卸:复用 install://<job>/log 流式日志协议 + install_lock。
+/** 强制重读登录环境真实 PATH(供"重新检测"触发,使运行期才装的 Node 不重启即可识别) */
+export const refreshPathEnv = () => call<void>("refresh_path_env");
 export const detectNpm = () => call<NpmStatus>("detect_npm");
 export const detectAgentCli = (agent: AgentCli) =>
   call<InstalledVersion>("detect_agent_cli", { agent });

@@ -8,6 +8,12 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-06-05
+
+### Fixed
+
+- AI coding tools (Claude Code / Codex) and `npm` are now detected even when the app is launched from Finder/Dock (macOS) or Explorer (Windows). GUI-launched apps inherit a minimal PATH that omits nvm/Homebrew/fnm install locations, so tools installed there previously showed as "not installed". The app now resolves the real PATH from the login shell (macOS/Linux) or the live registry PATH (Windows), falls back to a POSIX shell when the default shell is non-POSIX (fish/csh), and "Re-check" re-reads it at runtime without restarting the app.
+
 ## [0.3.2] - 2026-06-03
 
 ### Added

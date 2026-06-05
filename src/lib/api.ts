@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AgentCli,
   AgentHookStatus,
   AgentKind,
   AiLinesResult,
@@ -35,6 +36,7 @@ import type {
   LogKind,
   MockPreset,
   NotesListResult,
+  NpmStatus,
   AggregateRepoEntry,
   AggregateHistoryResult,
   AggregateWorkingStatusResult,
@@ -101,6 +103,15 @@ export const setGitAiConfig = (patch: GitAiConfigPatch) =>
 export const setAutoUpdate = (enabled: boolean) =>
   call<GitAiConfig>("set_auto_update", { enabled });
 export const getInstallHistory = () => call<InstallHistoryEntry[]>("install_history");
+
+// AI 编码 CLI(Claude Code / Codex)的 npm 装卸:复用 install://<job>/log 流式日志协议 + install_lock。
+export const detectNpm = () => call<NpmStatus>("detect_npm");
+export const detectAgentCli = (agent: AgentCli) =>
+  call<InstalledVersion>("detect_agent_cli", { agent });
+export const installAgentCli = (jobId: string, agent: AgentCli, version?: string) =>
+  call<number>("install_agent_cli", { jobId, agent, version: version ?? null });
+export const uninstallAgentCli = (jobId: string, agent: AgentCli, confirmToken: string) =>
+  call<void>("uninstall_agent_cli", { jobId, agent, confirmToken });
 
 // Hooks
 export const getHooksStatus = () => call<HooksStatus>("get_hooks_status");

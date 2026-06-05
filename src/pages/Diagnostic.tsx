@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Badge } from "../components/Badge";
 import { Collapsible } from "../components/ui/CollapsibleSection";
 import { QuickFixDialog, type QuickFixSkipEntry } from "../components/QuickFixDialog";
+import { AgentCliInstaller } from "../components/AgentCliInstaller";
 import { Dialog } from "../components/ui/DialogShell";
 import { StatusDot } from "../components/StatusDot";
 import { Tooltip } from "../components/ui/TooltipBubble";
@@ -641,6 +642,9 @@ export default function DiagnosticPage({ embedded = false }: { embedded?: boolea
               </div>
             )}
           </section>
+
+          {/* Claude Code / Codex 的 npm 装卸(就近接在 agent hook 网格下方:装好 CLI → 配 hook 是同一条引导线) */}
+          <AgentCliInstaller />
 
           {/* 全部检查项抽屉:默认折叠的完整清单(问题已在上方"需要处理"突出);异常项置顶 + 状态 chip,detail/impact 收进 ⓘ。 */}
           <Collapsible

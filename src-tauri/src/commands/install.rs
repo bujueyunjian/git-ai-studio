@@ -73,7 +73,7 @@ pub async fn get_installed_version() -> Result<InstalledVersion, String> {
     }
 }
 
-fn extract_version(s: &str) -> Option<String> {
+pub(crate) fn extract_version(s: &str) -> Option<String> {
     // 严格匹配 semver `X.Y.Z`(可带 `-prerelease`),失败返回 None,由调用方让前端显示"版本未知"。
     static RE: once_cell::sync::Lazy<regex::Regex> = once_cell::sync::Lazy::new(|| {
         regex::Regex::new(r"\b(\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?)\b").unwrap()
@@ -89,11 +89,11 @@ pub async fn is_install_running(state: State<'_, AppState>) -> Result<Option<Str
     Ok(state.install_lock.read().ok().and_then(|g| g.clone()))
 }
 
-fn acquire_lock(state: &AppState, job_id: &str) -> Result<(), String> {
+pub(crate) fn acquire_lock(state: &AppState, job_id: &str) -> Result<(), String> {
     // 跨锁对称:hooks 切换进行中拒绝
     if let Ok(g) = state.hooks_lock.read() {
         if g.is_some() {
-            return Err("Hooks 切换正在进行,稍后再装/卸 git-ai".into());
+            return Err("Hooks 切换正在进行,稍后再试".into());
         }
     }
     let mut g = state
@@ -107,7 +107,7 @@ fn acquire_lock(state: &AppState, job_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn release_lock(state: &AppState) {
+pub(crate) fn release_lock(state: &AppState) {
     if let Ok(mut g) = state.install_lock.write() {
         *g = None;
     }

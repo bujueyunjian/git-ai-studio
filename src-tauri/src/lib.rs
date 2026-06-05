@@ -10,6 +10,7 @@
 //   repo       仓库扫描与 HEAD 读取
 //   commands   #[tauri::command] 暴露层
 
+pub mod agent_cli;
 pub mod agents;
 pub mod auto_launch;
 pub mod cc_switch_watcher;
@@ -167,6 +168,10 @@ pub fn run() {
             commands::install::set_git_ai_config,
             commands::install::set_auto_update,
             commands::install::install_history,
+            commands::agent_cli::detect_npm,
+            commands::agent_cli::detect_agent_cli,
+            commands::agent_cli::install_agent_cli,
+            commands::agent_cli::uninstall_agent_cli,
             commands::settings::get_app_settings,
             commands::settings::set_app_settings,
             commands::settings::get_auto_launch_status,

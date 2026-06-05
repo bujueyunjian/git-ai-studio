@@ -1,3 +1,4 @@
+pub mod agent_cli;
 pub mod auth;
 pub mod blame;
 pub mod branches;

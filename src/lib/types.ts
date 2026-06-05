@@ -133,6 +133,16 @@ export interface InstalledVersion {
   binary_path: string | null;
 }
 
+/** 可被本应用代装的外部 AI 编码 CLI(npm 包)。安装目标集合 != 被探测 hook 的 AgentKind 集合。 */
+export type AgentCli = "ClaudeCode" | "Codex";
+
+/** npm 探测结果。available=false 是预期空态(未装 Node),前端据此禁用装/卸并提示,不弹错。 */
+export interface NpmStatus {
+  available: boolean;
+  version: string | null;
+  path: string | null;
+}
+
 export interface InstallHistoryEntry {
   at_unix_ms: number;
   action: "install" | "upgrade" | "uninstall";

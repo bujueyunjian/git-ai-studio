@@ -44,6 +44,11 @@ tauri-plugin-updater = "2"
 # 更新安装后重启进程(配合 updater 的 install-then-restart 流程)
 tauri-plugin-process = "2"
 
+# 桌面端专属:单实例守护——第二次启动不再新建进程,而是唤起已有实例的主窗口
+# (否则 Tauri 默认允许无限多开,会出现双托盘/双宠物窗/config.json 并发写)
+[target.'cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = "2"
+
 # Windows 专属:从注册表读 live PATH(env_path 模块),绕开进程的旧 PATH 快照
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

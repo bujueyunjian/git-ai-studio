@@ -61,7 +61,18 @@ pub fn run() {
     // 导致随后 tauri-plugin-log 注册时 panic("attempted to set a logger after ...")。
     let db = db::open().expect("打开 SQLite 失败,无法启动 git-ai-studio");
 
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    // 单实例守护:第二个进程启动时,插件经平台级 IPC 检测到已有实例,转交参数后直接退出;
+    // 已有实例在回调里唤起主窗口。须最先注册(任何插件/窗口初始化之前),接入方式对齐 cc-switch。
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            restore_main_window(app);
+        }));
+    }
+
+    builder
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         // 原生目录选择器(RepoSetupGuide wizard step 2 + Repo 页扫描根目录)

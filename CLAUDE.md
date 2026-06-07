@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) and human contributo
 ## 重要文档(动手前先扫一眼)
 
 - [`docs/product/PR-FAQ.md`](docs/product/PR-FAQ.md) —— 产品定位、FAQ、风险。任何砍/留决策的最终依据
-- [`docs/adr/`](docs/adr/) —— 13 个 ADR 锁定的架构决定(router 自研 / shadcn / Tailwind v4 / 不加 zod / CSS 动画 / updater 策略 / 三平台打包 / Conventional Commits / CI matrix / 应用内自更新 / 桌面宠物 / 跨仓聚合口径 / 行级归因并入提交归因)
+- [`docs/adr/`](docs/adr/) —— 14 个 ADR 锁定的架构决定(router 自研 / shadcn / Tailwind v4 / 不加 zod / CSS 动画 / updater 策略 / 三平台打包 / Conventional Commits / CI matrix / 应用内自更新 / 桌面宠物 / 跨仓聚合口径 / 行级归因并入提交归因 / 单实例守护)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) —— 贡献流程 / commit 规范 / PR 模板
 - [`README.md`](README.md) / [`README.zh-CN.md`](README.zh-CN.md) —— 对外门面
 

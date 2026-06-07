@@ -21,6 +21,7 @@ production precedents that informed the call.
 | 011 | [Desktop companion (Ink pet)](./0011-desktop-companion-ink-pet.md)                              | **Accepted**                                          | 2026-05-29 |
 | 012 | [Cross-repo aggregation scope](./0012-cross-repo-aggregation-scope.md)                          | **Accepted**                                          | 2026-05-30 |
 | 013 | [Blame into Commit Attribution](./0013-blame-into-commit-attribution.md)                        | **Accepted**                                          | 2026-05-31 |
+| 014 | [Single-instance guard](./0014-single-instance-guard.md)                                        | **Accepted**                                          | 2026-06-07 |
 
 ## Guiding principles
 

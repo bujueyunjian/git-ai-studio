@@ -8,6 +8,13 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-06-07
+
+### Fixed
+
+- Launching the app a second time no longer spawns a duplicate process. Tauri allows multiple instances by default, so the app could previously be opened several times — producing two tray icons, two desktop-pet windows when the pet was enabled, and concurrent writes to the same `config.json`. A single-instance guard now hands off to the running instance and focuses its main window instead of starting a new one.
+- Claude Code / Codex / `npm` installed under nvm, Volta, Bun, a custom npm prefix, Homebrew, or the official native installer (`~/.local/bin`) are now detected even when the login-shell PATH probe is skipped (PATH already resolves `npm`) or fails (non-POSIX default shell, slow or failing shell rc). The detector falls back to scanning these well-known install directories, and prepends the resolved binary's own directory to the subprocess PATH so the `#!/usr/bin/env node` shebang can find `node`.
+
 ## [0.3.4] - 2026-06-05
 
 ### Fixed

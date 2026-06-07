@@ -50,7 +50,7 @@ pub async fn detect_npm() -> Result<NpmStatus, String> {
                 &path,
                 &["--version"],
                 None,
-                &[("PATH".into(), crate::env_path::real_path())],
+                &[("PATH".into(), agent_cli::path_with_bin_dir(&path))],
                 Duration::from_secs(5),
             )
             .await
@@ -91,8 +91,9 @@ pub async fn install_agent_cli(
     let topic = format!("install://{job_id}/log");
     let args = agent_cli::build_install_args(agent, version.as_deref());
     let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
-    // 注入真实 PATH:npm 自身要找 node,装完的 postinstall 脚本也可能 spawn node。
-    let env = [("PATH".to_string(), crate::env_path::real_path())];
+    // 注入真实 PATH(并拼上 npm 所在目录):npm 自身要找 node,装完的 postinstall 脚本也
+    // 可能 spawn node;npm 经固定目录二级解析命中时,其目录可能不在镜像里。
+    let env = [("PATH".to_string(), agent_cli::path_with_bin_dir(&npm))];
     let result = run_streaming(
         &app,
         &npm,
@@ -132,7 +133,7 @@ pub async fn uninstall_agent_cli(
     let topic = format!("install://{job_id}/log");
     let args = agent_cli::build_uninstall_args(agent);
     let args_ref: Vec<&str> = args.iter().map(String::as_str).collect();
-    let env = [("PATH".to_string(), crate::env_path::real_path())];
+    let env = [("PATH".to_string(), agent_cli::path_with_bin_dir(&npm))];
     let result = run_streaming(
         &app,
         &npm,

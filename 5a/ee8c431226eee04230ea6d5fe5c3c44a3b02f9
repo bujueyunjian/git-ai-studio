@@ -1,0 +1,33 @@
+README.zh-CN.md
+  s_2d709f836ed6f6::t_ffe3127fe83fe8 11,67
+src-tauri/tauri.conf.json
+  s_2d709f836ed6f6::t_ffe3127fe83fe8 4
+CHANGELOG.md
+  s_2d709f836ed6f6::t_2a0356f0286d1f 17
+  s_2d709f836ed6f6::t_ffe3127fe83fe8 11-12,150-151
+package.json
+  s_2d709f836ed6f6::t_ffe3127fe83fe8 4
+README.md
+  s_2d709f836ed6f6::t_ffe3127fe83fe8 11,67
+src-tauri/Cargo.toml
+  s_2d709f836ed6f6::t_ffe3127fe83fe8 3
+  s_2d709f836ed6f6::t_2a0356f0286d1f 31
+src-tauri/Cargo.lock
+  s_2d709f836ed6f6::t_02a994f16d30c1 227,229,233,1570,4319-4329
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "5aee8c431226eee04230ea6d5fe5c3c44a3b02f9",
+  "prompts": {},
+  "sessions": {
+    "s_2d709f836ed6f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a190ad-d6ae-73e2-a399-2ec16abb8859",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "bujueyunjian <bbujueyunjian@gmail.com>"
+    }
+  }
+}

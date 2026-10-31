@@ -166,12 +166,29 @@ jobs:
             echo "Linux AppImage not found" >&2
             exit 1
           fi
+
+          # 校验成品中的图标和桌面入口，阻止构建机绝对路径进入发布包。
+          appimage="$(realpath "$appimage")"
+          check_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$check_dir"' EXIT
+          (cd "$check_dir" && "$appimage" --appimage-extract >/dev/null)
+          for entry in "$check_dir/squashfs-root/.DirIcon" "$check_dir/squashfs-root/"*.desktop; do
+            if [ ! -f "$entry" ]; then
+              echo "AppImage metadata missing or broken: $entry" >&2
+              exit 1
+            fi
+            if [ -L "$entry" ] && [[ "$(readlink "$entry")" = /* ]]; then
+              echo "AppImage metadata uses an absolute symlink: $entry" >&2
+              exit 1
+            fi
+          done
+
           cp "$deb" "release-assets/Git-AI-Studio-${version}-Linux-${arch_label}.deb"
-          cp "$appimage" "release-assets/Git-AI-Studio-${version}-Linux-${arch_label}.AppImage"
+          cp "$appimage" "release-assets/Git-AI-Studio-${version}-${arch_label}.AppImage"
           # Updater signature for AppImage (optional)
           sig="${appimage}.sig"
           if [ -f "$sig" ]; then
-            cp "$sig" "release-assets/Git-AI-Studio-${version}-Linux-${arch_label}.AppImage.sig"
+            cp "$sig" "release-assets/Git-AI-Studio-${version}-${arch_label}.AppImage.sig"
           fi
 
       - name: Upload build artifacts
@@ -253,9 +270,9 @@ jobs:
               *-macOS-universal.app.tar.gz)
                 # macOS universal updater artifact
                 mac_url="$url"; mac_sig="$sig_content";;
-              *-Linux-aarch64.AppImage|*-Linux-aarch64.appimage)
+              *-aarch64.AppImage|*-aarch64.appimage)
                 linux_arm64_url="$url"; linux_arm64_sig="$sig_content";;
-              *-Linux-x86_64.AppImage|*-Linux-x86_64.appimage)
+              *-x86_64.AppImage|*-x86_64.appimage)
                 linux_x64_url="$url"; linux_x64_sig="$sig_content";;
               *-Windows-x86_64.msi)
                 win_url="$url"; win_sig="$sig_content";;

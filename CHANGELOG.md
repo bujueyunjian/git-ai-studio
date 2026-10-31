@@ -8,6 +8,11 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 
 ## [Unreleased]
 
+### Fixed
+
+- AppImage icon and desktop entry links remain valid after downloading or moving the bundle, allowing AppImage catalog validation and desktop integration.
+- AppImage release filenames follow the catalog naming convention, with matching signatures and updater download URLs.
+
 ## [0.5.1] - 2026-09-08
 
 ### Fixed

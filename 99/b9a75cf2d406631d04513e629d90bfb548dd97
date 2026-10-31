@@ -1,0 +1,25 @@
+.github/workflows/release.yml
+  s_2d709f836ed6f6::t_442b9a5bd30e87 169-185,187,191,273,275
+CHANGELOG.md
+  s_2d709f836ed6f6::t_dda1313da0c7ba 11-15
+package.json
+  s_2d709f836ed6f6::t_442b9a5bd30e87 74
+pnpm-lock.yaml
+  s_2d709f836ed6f6::t_135c3bb35cd31d 151-152,1799-1800,1805-1806,1811-1812,1817-1818,1823-1824,1829-1830,1835-1836,1841-1842,1847-1848,1853-1854,1859-1860,1865-1866,5637,5640,5643,5646,5649,5652,5655,5658,5661,5664,5667,5670,5672-5682
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "99b9a75cf2d406631d04513e629d90bfb548dd97",
+  "prompts": {},
+  "sessions": {
+    "s_2d709f836ed6f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a190ad-d6ae-73e2-a399-2ec16abb8859",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "bujueyunjian <bbujueyunjian@gmail.com>"
+    }
+  }
+}

@@ -1,0 +1,35 @@
+src/__tests__/language.test.ts
+  s_2d709f836ed6f6::t_ac4993acb1a868 1-27
+src/i18n/index.ts
+  s_2d709f836ed6f6::t_ac4993acb1a868 17,34,46
+CHANGELOG.md
+  s_2d709f836ed6f6::t_868c594321ed7c 11-16,164-165
+README.md
+  s_2d709f836ed6f6::t_fd1e0503face18 11,67
+README.zh-CN.md
+  s_2d709f836ed6f6::t_af11b4462420ad 11,67
+package.json
+  s_2d709f836ed6f6::t_7bc83c8fa5ac49 4
+src-tauri/Cargo.lock
+  s_2d709f836ed6f6::t_890cbee1661ecd 1570
+src-tauri/Cargo.toml
+  s_2d709f836ed6f6::t_87bd2562b4a2af 3
+src-tauri/tauri.conf.json
+  s_2d709f836ed6f6::t_8c435ab3850a6f 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "23d387abfddd17ae46d3e6613494735078176ed2",
+  "prompts": {},
+  "sessions": {
+    "s_2d709f836ed6f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a190ad-d6ae-73e2-a399-2ec16abb8859",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "bujueyunjian <bbujueyunjian@gmail.com>"
+    }
+  }
+}

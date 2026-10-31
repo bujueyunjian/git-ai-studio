@@ -1,0 +1,56 @@
+.github/scripts/prepare-appimage.sh
+  s_2d709f836ed6f6::t_61f54cd55b17cd 11
+  s_2d709f836ed6f6::t_041ef1aaca5840 1-10,12-26
+CHANGELOG.md
+  s_2d709f836ed6f6::t_61f54cd55b17cd 17
+  s_2d709f836ed6f6::t_041ef1aaca5840 13-16,18
+  s_2d709f836ed6f6::t_a3f1ba9fbeda08 11-12,158-159
+README.md
+  s_2d709f836ed6f6::t_a3f1ba9fbeda08 11,67
+README.zh-CN.md
+  s_2d709f836ed6f6::t_a3f1ba9fbeda08 11,67
+src-tauri/tauri.conf.json
+  s_2d709f836ed6f6::t_a3f1ba9fbeda08 4
+src-tauri/Cargo.toml
+  s_2d709f836ed6f6::t_a3f1ba9fbeda08 3
+.github/workflows/release.yml
+  s_2d709f836ed6f6::t_041ef1aaca5840 72,75,88-90,108-111,184,186,189,193,196-202
+  s_2d709f836ed6f6::t_2ef45269e9bd58 85
+  s_2d709f836ed6f6::t_61f54cd55b17cd 77-79
+  s_2d709f836ed6f6::t_38222a892e13c8 87
+  s_2d709f836ed6f6::t_8d8a79b2d2247e 74
+  s_2d709f836ed6f6::t_f8182e094b56af 203
+.github/scripts/check-appimage-window.py
+  s_2d709f836ed6f6::t_c268c8ce8c4b80 69-73,75-76
+  s_2d709f836ed6f6::t_041ef1aaca5840 1-68,74,77-93
+package.json
+  s_2d709f836ed6f6::t_a3f1ba9fbeda08 4
+  s_2d709f836ed6f6::t_61f54cd55b17cd 74
+.github/scripts/check-appimage.sh
+  s_2d709f836ed6f6::t_dac7b1183ba463 17
+  s_2d709f836ed6f6::t_fdceb8c44cb198 9-10
+  s_2d709f836ed6f6::t_38222a892e13c8 44
+  s_2d709f836ed6f6::t_041ef1aaca5840 1-8,11-16,18-23,25,28-43,45,47-49
+  s_2d709f836ed6f6::t_2ef45269e9bd58 24,26-27
+  s_2d709f836ed6f6::t_8fa855d184ef9b 46
+pnpm-lock.yaml
+  s_2d709f836ed6f6::t_9b035428ce7bdd 151-152,1799-1800,1805-1806,1811-1812,1817-1818,1823-1824,1829-1830,1835-1836,1841-1842,1847-1848,1853-1854,1859-1860,1865-1866,5637,5640,5643,5646,5649,5652,5655,5658,5661,5664,5667,5670,5672-5682
+src-tauri/Cargo.lock
+  s_2d709f836ed6f6::t_72b26caf2ff050 1570
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "1372a570fe77a06c94a4be5c6c2caecd63e3314d",
+  "prompts": {},
+  "sessions": {
+    "s_2d709f836ed6f6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a190ad-d6ae-73e2-a399-2ec16abb8859",
+        "model": "gpt-6-astra"
+      },
+      "human_author": "bujueyunjian <bbujueyunjian@gmail.com>"
+    }
+  }
+}

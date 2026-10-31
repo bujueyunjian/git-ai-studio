@@ -8,6 +8,14 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-10-31
+
+### Fixed
+
+- AppImage launchers are executable by all users, including when the bundle is mounted with root ownership. Releases now verify offline startup and a visible window using a separate unprivileged user.
+- AppImage filenames use `Git_AI_Studio` to match the application's display name and AppImage catalog convention.
+- Updated the AppImage bundler to avoid shipping graphics libraries that conflict with newer Mesa drivers and leave the application window blank.
+
 ## [0.5.2] - 2026-10-31
 
 ### Fixed
@@ -147,7 +155,8 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 - Self-hosted hook server (Windows scheduled task + VBS shim + Node HTTP server). Hooks now go exclusively through the official `git ai install-hooks`.
 - Feishu webhook push (replaced by OS-native notifications).
 
-[Unreleased]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.4.0...v0.5.0

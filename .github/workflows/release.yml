@@ -69,15 +69,25 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential \
             curl \
+            dbus-x11 \
             file \
+            fonts-noto-cjk \
+            imagemagick \
             libayatana-appindicator3-dev \
+            libegl1 \
+            libgl1-mesa-dri \
+            libgles2 \
             librsvg2-dev \
             libssl-dev \
             libwebkit2gtk-4.1-dev \
             patchelf \
             pkg-config \
+            squashfs-tools \
             wget \
-            xdg-utils
+            xauth \
+            xdg-utils \
+            xdotool \
+            xvfb
 
       - name: Get pnpm store path
         id: pnpm-store
@@ -94,6 +104,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Prepare AppImage launcher permissions
+        if: runner.os == 'Linux'
+        run: bash .github/scripts/prepare-appimage.sh
 
       - name: Build Tauri bundles
         env:
@@ -167,29 +181,25 @@ jobs:
             exit 1
           fi
 
-          # 校验成品中的图标和桌面入口，阻止构建机绝对路径进入发布包。
+          # 校验已签名成品，必须允许其他普通用户离线启动并显示窗口。
           appimage="$(realpath "$appimage")"
-          check_dir="$(mktemp -d)"
-          trap 'rm -rf -- "$check_dir"' EXIT
-          (cd "$check_dir" && "$appimage" --appimage-extract >/dev/null)
-          for entry in "$check_dir/squashfs-root/.DirIcon" "$check_dir/squashfs-root/"*.desktop; do
-            if [ ! -f "$entry" ]; then
-              echo "AppImage metadata missing or broken: $entry" >&2
-              exit 1
-            fi
-            if [ -L "$entry" ] && [[ "$(readlink "$entry")" = /* ]]; then
-              echo "AppImage metadata uses an absolute symlink: $entry" >&2
-              exit 1
-            fi
-          done
+          bash .github/scripts/check-appimage.sh "$appimage" appimage-test-results
 
           cp "$deb" "release-assets/Git-AI-Studio-${version}-Linux-${arch_label}.deb"
-          cp "$appimage" "release-assets/Git-AI-Studio-${version}-${arch_label}.AppImage"
+          cp "$appimage" "release-assets/Git_AI_Studio-${version}-${arch_label}.AppImage"
           # Updater signature for AppImage (optional)
           sig="${appimage}.sig"
           if [ -f "$sig" ]; then
-            cp "$sig" "release-assets/Git-AI-Studio-${version}-${arch_label}.AppImage.sig"
+            cp "$sig" "release-assets/Git_AI_Studio-${version}-${arch_label}.AppImage.sig"
           fi
+
+      - name: Upload AppImage startup evidence
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: appimage-startup-${{ matrix.artifact }}
+          path: appimage-test-results/
+          if-no-files-found: ignore
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

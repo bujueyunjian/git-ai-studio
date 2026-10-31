@@ -14,7 +14,7 @@
 //    归因/authorship · 占比/share · 自研/custom · 本机/local · 钩子/hook ·
 //    仓库/repository · 提交/commit · 归一/normalize。品牌名(git-ai / Claude / Cursor 等)保留。
 //
-// 4. 语言检测顺序:localStorage("git-ai-studio.lang") → navigator.language → fallback "zh-CN"。
+// 4. 语言检测顺序:localStorage("git-ai-studio.lang") → 系统语言;中文环境用中文,其余用英文。
 //    fallbackLng = "en" —— 当某 key 在当前语言里缺失时回落英文,避免裸 key 出现。
 //
 // 5. 主入口 `src/main.tsx` 必须 `import "./i18n"` 在任何组件 mount 之前,确保
@@ -31,7 +31,7 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 const LANG_STORAGE_KEY = "git-ai-studio.lang";
 
-/** 从 localStorage / navigator 推断初始语言。SSR / 隐私模式下安全降级到 zh-CN。 */
+/** 优先保留用户选择;系统语言为中文时用中文,其余环境默认英文。 */
 function detectInitialLanguage(): SupportedLanguage {
   try {
     const stored = localStorage.getItem(LANG_STORAGE_KEY);
@@ -42,9 +42,8 @@ function detectInitialLanguage(): SupportedLanguage {
   if (typeof navigator !== "undefined") {
     const lang = navigator.language || (navigator.languages && navigator.languages[0]) || "";
     if (lang.toLowerCase().startsWith("zh")) return "zh-CN";
-    if (lang.toLowerCase().startsWith("en")) return "en";
   }
-  return "zh-CN";
+  return "en";
 }
 
 void i18n.use(initReactI18next).init({

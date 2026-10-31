@@ -8,6 +8,12 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-10-31
+
+### Fixed
+
+- Default to Chinese in Chinese system locales and English in all other locales, while preserving the user's saved language choice.
+
 ## [0.5.3] - 2026-10-31
 
 ### Fixed
@@ -155,7 +161,8 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 - Self-hosted hook server (Windows scheduled task + VBS shim + Node HTTP server). Hooks now go exclusively through the official `git ai install-hooks`.
 - Feishu webhook push (replaced by OS-native notifications).
 
-[Unreleased]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.4...HEAD
+[0.5.4]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.3...v0.5.4
 [0.5.3]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.0...v0.5.1

@@ -8,10 +8,13 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-31
+
 ### Fixed
 
 - AppImage icon and desktop entry links remain valid after downloading or moving the bundle, allowing AppImage catalog validation and desktop integration.
 - AppImage release filenames follow the catalog naming convention, with matching signatures and updater download URLs.
+- Release validation passes on Rust 1.99 with the upstream fix for the async-trait generated `double_must_use` warning.
 
 ## [0.5.1] - 2026-09-08
 
@@ -144,7 +147,8 @@ Version bumps are manual — see [CONTRIBUTING.md](CONTRIBUTING.md#releasing-a-n
 - Self-hosted hook server (Windows scheduled task + VBS shim + Node HTTP server). Hooks now go exclusively through the official `git ai install-hooks`.
 - Feishu webhook push (replaced by OS-native notifications).
 
-[Unreleased]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/bujueyunjian/git-ai-studio/compare/v0.3.6...v0.4.0

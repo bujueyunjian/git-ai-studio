@@ -1,6 +1,6 @@
 [package]
 name = "git-ai-studio"
-version = "0.5.1"
+version = "0.5.2"
 description = "git-ai client toolkit: env diagnostics, install/upgrade and local AI code stats viewer"
 authors = []
 edition = "2021"
@@ -28,7 +28,7 @@ log = "0.4"
 walkdir = "2.5.0"
 regex = "1.12.3"
 futures = "0.3.32"
-async-trait = "0.1.89"
+async-trait = "0.1.92"
 dunce = "1.0.5"
 reqwest = { version = "^0.12", default-features = false, features = ["rustls-tls", "json"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
